@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         校招一键填写助手（本地版）
 // @namespace    local.campus.autofill
-// @version      1.3.0
+// @version      1.4.0
 // @description  校招网申表单一键填写：简历信息保存在本地，智能识别姓名/性别/学校/实习经历等字段，兼容 React/Vue 受控表单、原生下拉、单选组和 iframe 内嵌表单。数据不上传任何服务器。
 // @author       local
 // @match        *://*/*
@@ -92,6 +92,8 @@
         { key: 'school_m', label: '硕士学校', kws: ['硕士毕业院校', '研究生毕业院校', '硕士就读院校', '研究生就读院校', '硕士院校', '研究生院校', '硕士学校', '研究生学校', '硕士大学'] },
         { key: 'college_m', label: '硕士学院/院系', kws: ['硕士院系', '硕士学院', '研究生院系', '研究生学院'] },
         { key: 'major_m', label: '硕士专业/研究方向', kws: ['硕士研究生专业', '硕士专业', '研究生专业', '硕士研究方向', '硕士所学专业'] },
+        { key: 'advisor_m', label: '硕士导师', kws: ['硕士生导师', '研究生导师', '导师姓名', '指导教师', '指导老师', '导师'] },
+        { key: 'lab_m', label: '实验室', kws: ['实验室名称', '所在实验室', '所属实验室', '实验室'] },
         { key: 'gpa_m', label: '硕士GPA/均分', kws: ['硕士gpa', '硕士绩点', '硕士均分', '硕士平均分', '硕士平均成绩', '硕士成绩', '研究生gpa', '研究生成绩'] },
         { key: 'rank_m', label: '硕士排名', kws: ['硕士成绩排名', '硕士排名', '硕士名次', '研究生排名'] },
         { key: 'entrance_m', label: '硕士入学时间', kws: ['硕士入学时间', '硕士入学年月', '硕士入学年份', '硕士入学', '研究生入学'] },
@@ -525,6 +527,54 @@
     } catch (e) { return false; }
   }
 
+  // ------------------------------------------------------------------
+  // 级联选择器（省/市/区逐级展开）：把值逐列比对，每列点匹配项展开下一列
+  // ------------------------------------------------------------------
+  const REGION_KEYS = ['native_place', 'current_city', 'expect_city'];
+  const CASCADER_MENU_SELS = '.ant-cascader-menu, .el-cascader-menu, [class*="cascader-panel"] ul, [class*="cascade"] ul';
+  const bareRegion = (s) => norm(s).replace(/(自治区|特别行政区|省|市|区|县|旗)$/, '');
+
+  async function cascaderFillOne(el, value) {
+    try {
+      try { el.scrollIntoView({ block: 'center' }); } catch (e) {}
+      try { el.focus(); } catch (e) {}
+      mouseClick(el);
+      await sleep(350);
+      let clicks = 0;
+      for (let col = 0; col < 5; col++) {
+        const menus = [...document.querySelectorAll(CASCADER_MENU_SELS)].filter((m) => isVisible(m) && !inOwnUI(m));
+        if (!menus.length) break;
+        const menu = menus[Math.min(col, menus.length - 1)];
+        const nodes = [...menu.querySelectorAll('li, [class*="option"], [class*="node"], [role="option"]')]
+          .filter((o) => isVisible(o) && !inOwnUI(o))
+          .filter((o) => { const t = textOf(o).trim(); return t && t.length <= 20; });
+        const v = norm(value), vb = bareRegion(value);
+        let hitIdx = -1;
+        for (let i = 0; i < nodes.length; i++) {
+          const t = textOf(nodes[i]).trim();
+          const tn = norm(t), tb = bareRegion(t);
+          if (!tn) continue;
+          if (v.includes(tn) || tn.includes(v) || (vb && tb && (vb.includes(tb) || tb.includes(vb)))) { hitIdx = i; break; }
+        }
+        if (hitIdx < 0) { if (col === 0) { pressEsc(el); return false; } break; }
+        mouseClick(nodes[hitIdx]);
+        clicks++;
+        await sleep(350);
+      }
+      pressEsc(el);
+      return clicks > 0;
+    } catch (e) { return false; }
+  }
+
+  // "杭州 / 上海"这类多意向值逐个尝试
+  async function tryCascader(el, value) {
+    const alts = String(value).split(/[/、,，;；]+/).map((s) => s.trim()).filter(Boolean);
+    for (const v of alts.length ? alts : [String(value).trim()]) {
+      if (await cascaderFillOne(el, v)) return true;
+    }
+    return false;
+  }
+
   function mark(el, ok) {
     if (!el.classList) return;
     el.classList.remove('caf-ok', 'caf-preview', 'caf-fail');
@@ -694,8 +744,12 @@
           el.dispatchEvent(new Event('blur', { bubbles: true }));
           ok = el.value !== '';
         } else if (tag === 'INPUT' && (el.readOnly || el.getAttribute('role') === 'combobox')) {
-          // 只读输入框或组件库下拉（antd 的搜索框带 role=combobox）走自定义下拉流程
-          ok = await tryCustomDropdown(el, val, { strict: !!rule.choice });
+          // 地区类字段先按级联选择器尝试（省市区逐级展开），失败再按普通下拉
+          if (REGION_KEYS.includes(rule.key)) {
+            ok = (await tryCascader(el, val)) || (await tryCustomDropdown(el, val, { strict: !!rule.choice }));
+          } else {
+            ok = await tryCustomDropdown(el, val, { strict: !!rule.choice });
+          }
         } else {
           setValue(el, val);
           el.dispatchEvent(new Event('blur', { bubbles: true }));
@@ -742,7 +796,9 @@
         if (!rule || rule.long || rule.entry || rule.blobOf) continue;
         const val = (profile[rule.key] || '').trim();
         if (!val) continue;
-        const ok = await tryCustomDropdown(el, val, { strict: !!rule.choice });
+        const ok = REGION_KEYS.includes(rule.key)
+          ? ((await tryCascader(el, val)) || (await tryCustomDropdown(el, val, { strict: !!rule.choice })))
+          : await tryCustomDropdown(el, val, { strict: !!rule.choice });
         if (ok) { mark(el, true); push(rule.key, true, val); }
       }
     }

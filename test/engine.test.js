@@ -25,6 +25,8 @@ const FORM_HTML = `<!DOCTYPE html><html><body>
   <div class="row"><label>本科院校</label><input id="schoolB"></div>
   <div class="row"><label>硕士院校</label><input id="schoolM"></div>
   <div class="row"><label>硕士研究方向</label><input id="majorM"></div>
+  <div class="row"><label>研究生导师</label><input id="advisor"></div>
+  <div class="row"><label>所在实验室</label><input id="lab"></div>
   <!-- 2c. 英语成绩项 -->
   <div class="row"><label>四级成绩</label><input id="cet4"></div>
   <div class="row"><label>六级成绩</label><input id="cet6"></div>
@@ -58,7 +60,7 @@ const PROFILE = {
   name: '张三', gender: '男', birthdate: '2002-05-20', phone: '13800001234',
   email: 'zhangsan@example.com', political: '共青团员', ethnicity: '汉族',
   degree: '本科', school_b: '杭州电子科技大学', major_b: '软件工程', grad_b: '2025-06',
-  school_m: '浙江大学', major_m: '人工智能',
+  school_m: '浙江大学', major_m: '人工智能', advisor_m: '王教授', lab_m: '智能计算实验室',
   cet4: '560', cet6: '620', english: 'CET-6 620，可流利阅读英文文档',
   self_eval: '基础扎实，动手能力强。', ec_phone: '13900005678',
   // v1.0 旧键：school 用于验证"新键优先"，entrance_date 用于验证"旧键自动迁移到 entrance_b"
@@ -118,6 +120,8 @@ const PROFILE = {
     ['本科院校（显式学历字段）', $('schoolB').value === '杭州电子科技大学'],
     ['硕士院校（显式学历字段）', $('schoolM').value === '浙江大学'],
     ['硕士研究方向', $('majorM').value === '人工智能'],
+    ['硕士导师', $('advisor').value === '王教授'],
+    ['实验室', $('lab').value === '智能计算实验室'],
     ['四级成绩', $('cet4').value === '560'],
     ['六级成绩', $('cet6').value === '620'],
     ['英语水平（综合兜底）', $('eng').value === 'CET-6 620，可流利阅读英文文档'],
