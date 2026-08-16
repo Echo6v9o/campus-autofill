@@ -50,6 +50,8 @@ const HTML = `<!DOCTYPE html><html><body>
   armField('name');
   await new Promise((r) => setTimeout(r, 50));
   check('点击复制后出现点填徽标', !!badge() && badge().textContent.includes('张三'));
+  const styleText = doc.getElementById('caf-style').textContent;
+  check('徽标带红色呼吸灯动画（样式含 caf-breathe）', styleText.includes('caf-breathe') && styleText.includes('animation: caf-breathe'));
 
   // 悬停高亮
   hover(doc.getElementById('weird1'));

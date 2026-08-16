@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         校招一键填写助手（本地版）
 // @namespace    local.campus.autofill
-// @version      1.6.0
+// @version      1.6.1
 // @description  校招网申表单一键填写：简历信息保存在本地，智能识别姓名/性别/学校/实习经历等字段，兼容 React/Vue 受控表单、原生下拉、单选组和 iframe 内嵌表单。数据不上传任何服务器。
 // @author       local
 // @match        *://*/*
@@ -877,9 +877,14 @@
 #caf-panel .caf-copy.ok { color: #16a34a; }
 #caf-paste-badge { position: fixed; right: 16px; bottom: 16px; z-index: 2147483603; background: #16a34a; color: #fff;
   font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; font-size: 12px; padding: 8px 14px;
-  border-radius: 999px; box-shadow: 0 6px 18px rgba(22,163,74,.4); cursor: pointer; max-width: 70vw;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  border-radius: 999px; cursor: pointer; max-width: 70vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  animation: caf-breathe 1.5s ease-in-out infinite; }
 #caf-paste-badge b { font-weight: 600; }
+@keyframes caf-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,.65), 0 6px 18px rgba(22,163,74,.4); }
+  50% { box-shadow: 0 0 0 9px rgba(239,68,68,.12), 0 6px 18px rgba(22,163,74,.4); }
+}
+@media (prefers-reduced-motion: reduce) { #caf-paste-badge { animation: none; } }
 .caf-paste-target { outline: 2px solid #16a34a !important; outline-offset: 1px; cursor: copy !important; }
 #caf-panel .caf-entry { border: 1px solid #e8ebf3; border-radius: 10px; padding: 6px 10px 8px; margin: 8px 0; background: #fbfcff; }
 #caf-panel .caf-entry-head { display: flex; justify-content: space-between; align-items: center; color: #8a92a6; font-size: 12px; padding: 2px 0 4px; }
