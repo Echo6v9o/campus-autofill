@@ -52,6 +52,8 @@ const FORM_HTML = `<!DOCTYPE html><html><body>
   <div class="row"><label>紧急联系人电话</label><input id="ecphone"></div>
   <!-- 9. 不该被填的 -->
   <div class="row"><label>验证码</label><input id="cap"><button type="button">获取验证码</button></div>
+  <!-- 10. 排在验证码后面的正常字段（回归：弱层不应被上一行的"验证码"污染） -->
+  <div class="row"><label>GitHub</label><input id="gh"></div>
   <label><input type="checkbox" id="agree">同意条款</label>
 </form>
 </body></html>`;
@@ -62,7 +64,7 @@ const PROFILE = {
   degree: '本科', school_b: '杭州电子科技大学', major_b: '软件工程', grad_b: '2025-06',
   school_m: '浙江大学', major_m: '人工智能', advisor_m: '王教授', lab_m: '智能计算实验室',
   cet4: '560', cet6: '620', english: 'CET-6 620，可流利阅读英文文档',
-  self_eval: '基础扎实，动手能力强。', ec_phone: '13900005678',
+  self_eval: '基础扎实，动手能力强。', ec_phone: '13900005678', github: 'https://github.com/zhangsan',
   // v1.0 旧键：school 用于验证"新键优先"，entrance_date 用于验证"旧键自动迁移到 entrance_b"
   school: '旧版学校（不应生效）', entrance_date: '2021-09',
 };
@@ -147,6 +149,7 @@ const PROFILE = {
     ['自我评价（textarea）', $('eval').value === '基础扎实，动手能力强。'],
     ['紧急联系人电话（不串位）', $('ecphone').value === '13900005678'],
     ['验证码不填', $('cap').value === ''],
+    ['验证码后一行正常填（弱层不污染）', $('gh').value === 'https://github.com/zhangsan'],
     ['复选框不动', $('agree').checked === false],
     ['复制按钮：复制字段值', copyOk],
     ['复制按钮：反馈"已复制"', copyFeedback],

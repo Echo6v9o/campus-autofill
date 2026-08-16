@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         校招一键填写助手（本地版）
 // @namespace    local.campus.autofill
-// @version      1.5.0
+// @version      1.6.0
 // @description  校招网申表单一键填写：简历信息保存在本地，智能识别姓名/性别/学校/实习经历等字段，兼容 React/Vue 受控表单、原生下拉、单选组和 iframe 内嵌表单。数据不上传任何服务器。
 // @author       local
 // @match        *://*/*
@@ -374,15 +374,20 @@
 
   function matchRuleFor(el, profile) {
     const c = ctxOf(el);
-    // 黑名单（验证码等）对两层上下文全局生效，防止弱层文本绕过
-    const all = (c.strong + ' ' + c.weak).toLowerCase();
-    if (all.includes('验证码') || all.includes('captcha') || all.includes('verify')) return null;
+    // 黑名单（验证码等）只看控件自身的标签信号（强层），
+    // 弱层是相邻行的文本，若一并检查会误杀排在验证码后面的正常字段
+    if (isCaptchaCtx(c.strong)) return null;
     const rule = matchRule(c.strong) || matchRule(c.weak);
     if (rule && rule.byDegree) {
       const variant = FIELD_MAP[(DEGREE_BASE[rule.key] || rule.key) + degreeVariantOf(c, profile)];
       if (variant) return variant;
     }
     return rule;
+  }
+
+  function isCaptchaCtx(strong) {
+    const s = String(strong || '').toLowerCase();
+    return s.includes('验证码') || s.includes('captcha') || s.includes('verify');
   }
 
   // 根据上下文匹配字段：关键词出现位置越靠前越优先；同位置取更长关键词；exclude 出现在关键词之前则否决
@@ -829,10 +834,14 @@
   }
 
   window.addEventListener('message', (e) => {
-    if (!e.data || e.data.type !== 'caf:fill') return;
-    Promise.resolve(handleFillRequest(e.data.profile || {}, e.data.opts || {})).then((res) => {
-      try { e.source.postMessage({ type: 'caf:result', res }, '*'); } catch (err) {}
-    });
+    if (!e.data || typeof e.data !== 'object') return;
+    if (e.data.type === 'caf:fill') {
+      Promise.resolve(handleFillRequest(e.data.profile || {}, e.data.opts || {})).then((res) => {
+        try { e.source.postMessage({ type: 'caf:result', res }, '*'); } catch (err) {}
+      });
+    } else if (String(e.data.type).indexOf('caf:paste-') === 0) {
+      onPasteMessage(e.data);
+    }
   });
 
   // ------------------------------------------------------------------
@@ -866,6 +875,12 @@
   text-align: center; color: #98a2b8; border-radius: 6px; font-size: 11px; line-height: 28px; user-select: none; }
 #caf-panel .caf-copy:hover { background: #eef2fb; color: #4f7cff; }
 #caf-panel .caf-copy.ok { color: #16a34a; }
+#caf-paste-badge { position: fixed; right: 16px; bottom: 16px; z-index: 2147483603; background: #16a34a; color: #fff;
+  font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; font-size: 12px; padding: 8px 14px;
+  border-radius: 999px; box-shadow: 0 6px 18px rgba(22,163,74,.4); cursor: pointer; max-width: 70vw;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#caf-paste-badge b { font-weight: 600; }
+.caf-paste-target { outline: 2px solid #16a34a !important; outline-offset: 1px; cursor: copy !important; }
 #caf-panel .caf-entry { border: 1px solid #e8ebf3; border-radius: 10px; padding: 6px 10px 8px; margin: 8px 0; background: #fbfcff; }
 #caf-panel .caf-entry-head { display: flex; justify-content: space-between; align-items: center; color: #8a92a6; font-size: 12px; padding: 2px 0 4px; }
 #caf-panel .caf-entry-head button { all: unset; cursor: pointer; color: #e5484d; font-size: 12px; padding: 0 4px; }
@@ -901,6 +916,145 @@
     t.textContent = msg;
     document.documentElement.appendChild(t);
     setTimeout(() => t.remove(), ms || 2600);
+  }
+
+  // ------------------------------------------------------------------
+  // 点填模式：面板「复制」后，点击网页输入框直接写入该值（Esc 取消）
+  // 值保存在脚本内存中（非系统剪贴板），无权限弹窗、http 可用、只粘指定值
+  // ------------------------------------------------------------------
+  let pasteArm = null; // {value, label}
+  let pasteWired = false;
+
+  function forwardToChildren(msg) {
+    document.querySelectorAll('iframe').forEach((f) => {
+      try { f.contentWindow.postMessage(msg, '*'); } catch (e) {}
+    });
+  }
+
+  function armPaste(value, label) {
+    pasteArm = { value, label };
+    wirePasteUI();
+    forwardToChildren({ type: 'caf:paste-arm', value, label });
+  }
+
+  function disarmPaste() {
+    pasteArm = null;
+    unwirePasteUI();
+  }
+
+  // 收到其他框架的武装/解除消息（不再向上回传，避免循环；off-up 由粘贴发生方发起）
+  function onPasteMessage(d) {
+    if (d.type === 'caf:paste-arm') {
+      pasteArm = { value: d.value, label: d.label };
+      wirePasteUI();
+      forwardToChildren(d);
+    } else if (d.type === 'caf:paste-off') {
+      disarmPaste();
+    } else if (d.type === 'caf:paste-off-up') {
+      disarmPaste();
+      forwardToChildren({ type: 'caf:paste-off' });
+    }
+  }
+
+  function wirePasteUI() {
+    if (IS_TOP) {
+      let badge = document.getElementById('caf-paste-badge');
+      if (!badge) {
+        badge = document.createElement('div');
+        badge.id = 'caf-paste-badge';
+        badge.addEventListener('click', () => disarmPaste());
+        document.documentElement.appendChild(badge);
+      }
+      const shortVal = pasteArm.value.length > 24 ? pasteArm.value.slice(0, 24) + '…' : pasteArm.value;
+      badge.innerHTML = '📍 点按粘贴 <b>' + esc(shortVal) + '</b>（Esc 取消）';
+    }
+    if (pasteWired) return;
+    pasteWired = true;
+    document.addEventListener('click', pasteClickHandler, true);
+    document.addEventListener('mouseover', pasteHoverHandler, true);
+    document.addEventListener('keydown', pasteEscHandler, true);
+  }
+
+  function unwirePasteUI() {
+    document.querySelectorAll('.caf-paste-target').forEach((n) => { n.classList && n.classList.remove('caf-paste-target'); });
+    const badge = document.getElementById('caf-paste-badge');
+    if (badge) badge.remove();
+    if (!pasteWired) return;
+    pasteWired = false;
+    document.removeEventListener('click', pasteClickHandler, true);
+    document.removeEventListener('mouseover', pasteHoverHandler, true);
+    document.removeEventListener('keydown', pasteEscHandler, true);
+  }
+
+  function pasteEditable(el) {
+    if (!el || !el.closest) return null;
+    const t = el.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]');
+    return t || null;
+  }
+
+  function pasteEligible(el) {
+    if (!el || el.disabled || el.readOnly) return false;
+    if (inOwnUI(el) || !isVisible(el)) return false;
+    const tag = el.tagName;
+    if (tag === 'INPUT') {
+      const ty = (el.type || '').toLowerCase();
+      if (['password', 'file', 'submit', 'button', 'reset', 'image', 'checkbox', 'radio', 'search'].includes(ty)) return false;
+    }
+    if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT' && !el.isContentEditable) return false;
+    if (isCaptchaCtx(ctxOf(el).strong)) return false;
+    return true;
+  }
+
+  function fillPendingInto(el) {
+    try {
+      if (el.tagName === 'SELECT') {
+        const opt = findOption(el, pasteArm.value);
+        if (opt) {
+          el.value = opt.value;
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+          mark(el, true);
+        } else toast('下拉框里没有与「' + pasteArm.label + '」匹配的选项');
+        return;
+      }
+      if (el.isContentEditable) {
+        el.focus();
+        el.innerText = pasteArm.value;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        mark(el, true);
+        return;
+      }
+      setValue(el, pasteArm.value);
+      el.dispatchEvent(new Event('blur', { bubbles: true }));
+      mark(el, true);
+    } catch (e) {}
+  }
+
+  // 通知所有框架解除点填模式（顶层不给自己发 off-up，避免异步消息误杀紧随其后的重新激活）
+  function broadcastDisarm() {
+    disarmPaste();
+    if (!IS_TOP) { try { window.parent.postMessage({ type: 'caf:paste-off-up' }, '*'); } catch (e) {} }
+    forwardToChildren({ type: 'caf:paste-off' });
+  }
+
+  function pasteClickHandler(e) {
+    if (!pasteArm) return;
+    const t = pasteEditable(e.target);
+    if (!t || !pasteEligible(t)) return;
+    fillPendingInto(t);
+    // Ctrl/Cmd+点击：保持模式连续填多个框；普通点击填完自动退出
+    if (!(e.ctrlKey || e.metaKey)) broadcastDisarm();
+  }
+
+  function pasteHoverHandler(e) {
+    if (!pasteArm) return;
+    document.querySelectorAll('.caf-paste-target').forEach((n) => { n.classList && n.classList.remove('caf-paste-target'); });
+    const t = pasteEditable(e.target);
+    if (t && pasteEligible(t)) t.classList.add('caf-paste-target');
+  }
+
+  function pasteEscHandler(e) {
+    if (e.key !== 'Escape' || !pasteArm) return;
+    broadcastDisarm();
   }
 
   function buildUI() {
@@ -1052,13 +1206,15 @@
         const input = copyBtn.parentElement.querySelector('input, textarea');
         const val = input ? String(input.value || '').trim() : '';
         if (!val) { toast('该字段还没有内容'); return; }
+        const lab = copyBtn.parentElement.querySelector('label');
+        armPaste(val, lab ? lab.textContent.trim() : '字段');
         const ok = await copyText(val);
         if (ok) {
           copyBtn.textContent = '已复制';
           copyBtn.classList.add('ok');
           setTimeout(() => { copyBtn.textContent = '复制'; copyBtn.classList.remove('ok'); }, 1200);
         } else {
-          toast('复制失败，请手动选择文本复制');
+          toast('剪贴板不可用，但已进入点填模式：点击网页输入框即可粘贴');
         }
         return;
       }
