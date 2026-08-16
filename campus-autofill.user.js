@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         校招一键填写助手（本地版）
 // @namespace    local.campus.autofill
-// @version      1.2.0
+// @version      1.3.0
 // @description  校招网申表单一键填写：简历信息保存在本地，智能识别姓名/性别/学校/实习经历等字段，兼容 React/Vue 受控表单、原生下拉、单选组和 iframe 内嵌表单。数据不上传任何服务器。
 // @author       local
 // @match        *://*/*
@@ -463,21 +463,64 @@
     return null;
   }
 
-  // 自定义下拉（antd/element 等组件库）：点击展开后在可见弹层里找匹配项
-  async function tryCustomDropdown(el, value) {
+  // 下拉选项匹配：选项类字段走严格同义词匹配；学校/城市/时间等文本值放宽为包含匹配
+  function optionMatches(text, value, strict) {
+    const ot = norm(text);
+    const v = norm(value);
+    if (!ot || !v) return false;
+    if (ot === v) return true;
+    if (!strict) {
+      if (ot.includes(v) || v.includes(ot)) return true;
+      const oy = ot.replace(/年$/, '');
+      if (/^\d{4}$/.test(oy) && v.includes(oy)) return true; // "2025年" 选项 对应 "2025-06"
+    }
+    return textMatchesOption(text, value);
+  }
+
+  function mouseClick(el) {
     try {
-      el.scrollIntoView({ block: 'center' });
-      el.click();
-      el.dispatchEvent(new Event('focus', { bubbles: true }));
-      await sleep(250);
-      const sels = 'li, [role="option"], .ant-select-item-option, .el-select-dropdown__item, .next-select-menu-item, .rc-select-item-option, .semi-select-option, .t-select-option, .arco-select-option, .n-base-select-option';
-      const nodes = [...document.querySelectorAll(sels)].filter((n) => {
-        const r = n.getBoundingClientRect();
-        return r.width > 0 && r.height > 0 && r.top >= 0 && r.bottom <= innerHeight + 200;
-      });
-      const hit = nodes.find((n) => textMatchesOption(textOf(n), value));
-      if (hit) { hit.click(); await sleep(120); return true; }
-      document.body.click(); // 收起弹层
+      el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    } catch (e) {}
+    try { el.click(); } catch (e) {}
+  }
+
+  function pressEsc(el) {
+    const ev = { key: 'Escape', keyCode: 27, which: 27, bubbles: true };
+    try { el.dispatchEvent(new KeyboardEvent('keydown', ev)); } catch (e) {}
+    try { document.dispatchEvent(new KeyboardEvent('keydown', ev)); } catch (e) {}
+  }
+
+  // 自定义下拉（antd/element 等组件库）：点开触发器，在弹层里找匹配项点击
+  const LIB_OPT_SELS = '.ant-select-item-option, .el-select-dropdown__item, .next-select-menu-item, .rc-select-item-option, .semi-select-option, .t-select-option, .arco-select-option, .n-base-select-option, [role="option"]';
+  const POPUP_GATE = '[class*="dropdown"], [class*="popup"], [class*="popover"], [class*="overlay"], [role="listbox"], [class*="select"]';
+  async function tryCustomDropdown(el, value, o) {
+    const strict = !!(o && o.strict);
+    try {
+      try { el.scrollIntoView({ block: 'center' }); } catch (e) {}
+      try { el.focus(); } catch (e) {}
+      mouseClick(el);
+      let hit = null;
+      for (let t = 0; t < 3 && !hit; t++) {
+        await sleep(t ? 350 : 300);
+        const nodes = [...document.querySelectorAll('li, ' + LIB_OPT_SELS + ', [class*="option"]')].filter((n) => {
+          if (inOwnUI(n) || !isVisible(n)) return false;
+          const txt = textOf(n).trim();
+          if (!txt || txt.length > 30) return false; // 选项文字应较短，避免误点正文
+          // 通用选择器（li/[class*=option]）必须位于弹层容器内，防止误点页面普通列表
+          try { if (n.matches(LIB_OPT_SELS)) return true; } catch (e) {}
+          return !!(n.closest && n.closest(POPUP_GATE));
+        });
+        hit = nodes.find((n) => optionMatches(textOf(n).trim(), value, strict));
+      }
+      if (hit) {
+        mouseClick(hit);
+        await sleep(120);
+        pressEsc(el);
+        return true;
+      }
+      pressEsc(el);
+      try { document.body.click(); } catch (e) {}
       return false;
     } catch (e) { return false; }
   }
@@ -650,8 +693,9 @@
           setValue(el, dateLike(val, type));
           el.dispatchEvent(new Event('blur', { bubbles: true }));
           ok = el.value !== '';
-        } else if (tag === 'INPUT' && el.readOnly) {
-          ok = await tryCustomDropdown(el, val);
+        } else if (tag === 'INPUT' && (el.readOnly || el.getAttribute('role') === 'combobox')) {
+          // 只读输入框或组件库下拉（antd 的搜索框带 role=combobox）走自定义下拉流程
+          ok = await tryCustomDropdown(el, val, { strict: !!rule.choice });
         } else {
           setValue(el, val);
           el.dispatchEvent(new Event('blur', { bubbles: true }));
@@ -680,17 +724,25 @@
       push(key, true, list.length + ' 条合并填入');
     }
 
-    // 5) choice 字段兜底：识别到了但前面没填上的（自定义下拉挂载在 div[role=combobox] 上的情况）
+    // 5) 自定义下拉兜底：识别到字段但前面没填上的（div/span 触发器、非选项类字段的下拉）
     if (!opts.preview) {
-      const combos = [...document.querySelectorAll('[role="combobox"], [role="listbox"]')].filter((el) => isVisible(el) && !inOwnUI(el));
-      for (const el of combos) {
+      const triggers = [...document.querySelectorAll('[role="combobox"], [role="listbox"]')]
+        .filter((el) => isVisible(el) && !inOwnUI(el));
+      // div/span 型触发器：显示"请选择"这类占位文字、没有 input 的下拉
+      const divTrigs = [...document.querySelectorAll('div, span')].filter((el) => {
+        if (triggers.includes(el) || !isVisible(el) || inOwnUI(el)) return false;
+        if (el.children.length > 1) return false;
+        const t = textOf(el).trim();
+        return !!t && t.length <= 12 && /^(请选择|请挑选|请选取|点击选择|—+\s*请选择\s*—+)/.test(t);
+      });
+      for (const el of [...triggers, ...divTrigs]) {
         if (el.tagName === 'INPUT' && el.type !== 'text') continue;
+        if ((el.value || textOf(el) || '').trim() && !/^(请选择|请挑选|请选取|点击选择)/.test(textOf(el).trim())) continue;
         const rule = matchRuleFor(el, profile);
-        if (!rule || !rule.choice) continue;
+        if (!rule || rule.long || rule.entry || rule.blobOf) continue;
         const val = (profile[rule.key] || '').trim();
         if (!val) continue;
-        if ((el.value || el.innerText || '').trim()) continue;
-        const ok = await tryCustomDropdown(el, val);
+        const ok = await tryCustomDropdown(el, val, { strict: !!rule.choice });
         if (ok) { mark(el, true); push(rule.key, true, val); }
       }
     }
