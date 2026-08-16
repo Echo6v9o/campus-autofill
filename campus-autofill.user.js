@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         校招一键填写助手（本地版）
 // @namespace    local.campus.autofill
-// @version      1.4.0
+// @version      1.5.0
 // @description  校招网申表单一键填写：简历信息保存在本地，智能识别姓名/性别/学校/实习经历等字段，兼容 React/Vue 受控表单、原生下拉、单选组和 iframe 内嵌表单。数据不上传任何服务器。
 // @author       local
 // @match        *://*/*
@@ -862,6 +862,10 @@
   border: 1px solid #ddd; border-radius: 8px; padding: 6px 9px; font-size: 13px; font-family: inherit; outline: none; }
 #caf-panel .caf-row > input:focus, #caf-panel .caf-row > textarea:focus { border-color: #4f7cff; }
 #caf-panel textarea { min-height: 72px; resize: vertical; }
+#caf-panel .caf-copy { all: unset; cursor: pointer; box-sizing: border-box; flex: 0 0 34px; height: 28px; margin-top: 1px;
+  text-align: center; color: #98a2b8; border-radius: 6px; font-size: 11px; line-height: 28px; user-select: none; }
+#caf-panel .caf-copy:hover { background: #eef2fb; color: #4f7cff; }
+#caf-panel .caf-copy.ok { color: #16a34a; }
 #caf-panel .caf-entry { border: 1px solid #e8ebf3; border-radius: 10px; padding: 6px 10px 8px; margin: 8px 0; background: #fbfcff; }
 #caf-panel .caf-entry-head { display: flex; justify-content: space-between; align-items: center; color: #8a92a6; font-size: 12px; padding: 2px 0 4px; }
 #caf-panel .caf-entry-head button { all: unset; cursor: pointer; color: #e5484d; font-size: 12px; padding: 0 4px; }
@@ -971,8 +975,32 @@
   }
 
   function fieldInput(f) {
-    if (f.long) return `<textarea data-key="${f.key}" placeholder="${f.label}"></textarea>`;
-    return `<input data-key="${f.key}" placeholder="${f.label}">`;
+    const ctrl = f.long
+      ? `<textarea data-key="${f.key}" placeholder="${f.label}"></textarea>`
+      : `<input data-key="${f.key}" placeholder="${f.label}">`;
+    return ctrl + COPY_BTN;
+  }
+
+  // 每个输入框末尾的复制按钮：字段未被网站识别时，手动复制粘贴
+  const COPY_BTN = '<button class="caf-copy" title="复制内容，可粘贴到未识别的输入框">复制</button>';
+
+  function copyText(text) {
+    const fallback = () => {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;left:-9999px;top:0;';
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = typeof document.execCommand === 'function' ? document.execCommand('copy') : false;
+        ta.remove();
+        return ok;
+      } catch (e) { return false; }
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).then(() => true).catch(() => fallback());
+    }
+    return Promise.resolve(fallback());
   }
 
   function buildPanel() {
@@ -1019,6 +1047,21 @@
     });
 
     panel.addEventListener('click', async (e) => {
+      const copyBtn = e.target.closest && e.target.closest('.caf-copy');
+      if (copyBtn) {
+        const input = copyBtn.parentElement.querySelector('input, textarea');
+        const val = input ? String(input.value || '').trim() : '';
+        if (!val) { toast('该字段还没有内容'); return; }
+        const ok = await copyText(val);
+        if (ok) {
+          copyBtn.textContent = '已复制';
+          copyBtn.classList.add('ok');
+          setTimeout(() => { copyBtn.textContent = '复制'; copyBtn.classList.remove('ok'); }, 1200);
+        } else {
+          toast('复制失败，请手动选择文本复制');
+        }
+        return;
+      }
       const addBtn = e.target.closest && e.target.closest('[data-add]');
       if (addBtn) {
         const kind = addBtn.dataset.add;
@@ -1104,10 +1147,10 @@
     box.innerHTML = list.map((e, i) => `
       <div class="caf-entry">
         <div class="caf-entry-head"><span>第 ${i + 1} 条</span><button class="caf-entry-del" data-kind="${kind}" data-idx="${i}">✕ 删除</button></div>
-        <div class="caf-row"><label>${labels[0]}</label><input data-esub="org" value="${esc(e.org)}"></div>
-        <div class="caf-row"><label>${labels[1]}</label><input data-esub="role" value="${esc(e.role)}"></div>
-        <div class="caf-row"><label>${labels[2]}</label><input data-esub="period" value="${esc(e.period)}"></div>
-        <div class="caf-row"><label>${labels[3]}</label><textarea data-esub="desc">${esc(e.desc)}</textarea></div>
+        <div class="caf-row"><label>${labels[0]}</label><input data-esub="org" value="${esc(e.org)}">${COPY_BTN}</div>
+        <div class="caf-row"><label>${labels[1]}</label><input data-esub="role" value="${esc(e.role)}">${COPY_BTN}</div>
+        <div class="caf-row"><label>${labels[2]}</label><input data-esub="period" value="${esc(e.period)}">${COPY_BTN}</div>
+        <div class="caf-row"><label>${labels[3]}</label><textarea data-esub="desc">${esc(e.desc)}</textarea>${COPY_BTN}</div>
       </div>`).join('');
   }
 

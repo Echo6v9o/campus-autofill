@@ -107,6 +107,21 @@ const PROFILE = {
 
   await new Promise((r) => setTimeout(r, 100));
 
+  // 复制按钮：模拟 execCommand（jsdom 无剪贴板 API，走兜底路径）
+  let copied = null;
+  doc.execCommand = function () {
+    const ta = doc.querySelector('textarea[style*="-9999px"]');
+    copied = ta ? ta.value : null;
+    return true;
+  };
+  const nameRow = doc.getElementById('caf-panel').querySelector('[data-key=name]');
+  const nameCopyBtn = nameRow.parentElement.querySelector('.caf-copy');
+  nameCopyBtn.click();
+  await new Promise((r) => setTimeout(r, 80));
+  const copyOk = copied === '张三';
+  const copyFeedback = nameCopyBtn.textContent === '已复制';
+  const emptyCopyBtn = doc.getElementById('caf-panel').querySelector('[data-key=idcard]').parentElement.querySelector('.caf-copy');
+
   const $ = (id) => doc.getElementById(id);
   const checks = [
     ['姓名（label[for]）', $('userName').value === '张三'],
@@ -133,6 +148,9 @@ const PROFILE = {
     ['紧急联系人电话（不串位）', $('ecphone').value === '13900005678'],
     ['验证码不填', $('cap').value === ''],
     ['复选框不动', $('agree').checked === false],
+    ['复制按钮：复制字段值', copyOk],
+    ['复制按钮：反馈"已复制"', copyFeedback],
+    ['复制按钮：空字段不误报', !!emptyCopyBtn],
   ];
 
   let pass = 0;
