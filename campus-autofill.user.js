@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         校招一键填写助手（本地版）
 // @namespace    local.campus.autofill
-// @version      1.1.1
+// @version      1.2.0
 // @description  校招网申表单一键填写：简历信息保存在本地，智能识别姓名/性别/学校/实习经历等字段，兼容 React/Vue 受控表单、原生下拉、单选组和 iframe 内嵌表单。数据不上传任何服务器。
 // @author       local
 // @match        *://*/*
@@ -121,10 +121,32 @@
       ],
     },
     {
-      title: '经历与描述（长文本）',
+      title: '实习/工作经历（可多条）',
+      type: 'entries',
+      kind: 'internships',
+      addLabel: '➕ 添加一段实习',
+      matchRules: [
+        { key: 'intern_org', label: '实习公司/单位', entry: 'internships', sub: 'org', kws: ['实习公司名称', '实习单位名称', '实习单位', '实习公司', '任职公司', '公司名称', '单位名称', '公司'], exclude: ['期望', '意向', '行业'] },
+        { key: 'intern_role', label: '实习职位', entry: 'internships', sub: 'role', kws: ['实习职位', '实习岗位名称', '实习岗位', '实习职务', '担任职务', '职位名称', '岗位名称', '职务', '职位'] },
+        { key: 'intern_period', label: '实习起止时间', entry: 'internships', sub: 'period', kws: ['实习起止时间', '实习时间段', '实习时间', '实习期间', '起止时间'] },
+        { key: 'intern_desc', label: '实习工作内容', entry: 'internships', sub: 'desc', long: true, kws: ['实习经历描述', '工作内容', '实习内容', '实习描述', '主要工作', '工作描述', '职责描述', '实习职责', '工作职责'] },
+      ],
+    },
+    {
+      title: '项目经历（可多条）',
+      type: 'entries',
+      kind: 'projects',
+      addLabel: '➕ 添加一个项目',
+      matchRules: [
+        { key: 'project_name', label: '项目名称', entry: 'projects', sub: 'org', kws: ['项目名称', '项目名'] },
+        { key: 'project_role', label: '项目角色', entry: 'projects', sub: 'role', kws: ['项目担任角色', '项目角色', '项目职务', '项目中职务', '担任角色'] },
+        { key: 'project_period', label: '项目起止时间', entry: 'projects', sub: 'period', kws: ['项目起止时间', '项目时间段', '项目时间', '项目周期'] },
+        { key: 'project_desc', label: '项目描述', entry: 'projects', sub: 'desc', long: true, kws: ['项目描述', '项目内容', '项目简介', '项目详情', '项目说明'] },
+      ],
+    },
+    {
+      title: '经历与描述（其他长文本）',
       fields: [
-        { key: 'internship', label: '实习/工作经历', long: true, kws: ['实习经历', '工作经历', '工作/实习', '实习信息', '实习描述', '实践经历', '社会实践', '实习'] },
-        { key: 'project', label: '项目经历', long: true, kws: ['项目经历', '项目经验', '项目描述', '项目'] },
         { key: 'campus', label: '校园/学生工作', long: true, kws: ['学生工作', '校园经历', '校园工作', '社团经历', '社团', '校内经历', '任职经历', '社会工作'] },
         { key: 'research', label: '科研/论文', long: true, kws: ['科研经历', '科研成果', '学术论文', '论文', '科研', '学术成果', '学术'] },
         { key: 'awards', label: '获奖情况', long: true, kws: ['获奖情况', '获奖', '奖项', '荣誉', '证书', '奖励'] },
@@ -160,9 +182,12 @@
     { key: 'rank', hidden: true, byDegree: true, label: '成绩排名', kws: ['成绩排名', '排名', '名次'] },
     { key: 'entrance_date', hidden: true, byDegree: true, label: '入学时间', kws: ['入学时间', '入学年月', '入学年份', '入学'] },
     { key: 'grad_date', hidden: true, byDegree: true, label: '毕业时间', kws: ['毕业时间', '毕业年月', '毕业年份', '预计毕业', '毕业日期', '毕业', '届毕业生'], exclude: ['院校', '学校'] },
+    // 整段式经历（老式表单只有一个大文本框）：多条经历按条合并后填入
+    { key: 'internship', hidden: true, long: true, blobOf: 'internships', label: '实习经历（多条合并）', kws: ['实习经历', '工作经历', '工作/实习', '实习信息', '实践经历', '社会实践', '实习'] },
+    { key: 'project', hidden: true, long: true, blobOf: 'projects', label: '项目经历（多条合并）', kws: ['项目经历', '项目经验', '项目'] },
   ];
 
-  const ALL_FIELDS = [...SECTIONS.flatMap((s) => s.fields), ...HIDDEN_RULES];
+  const ALL_FIELDS = [...SECTIONS.flatMap((s) => [...(s.fields || []), ...(s.matchRules || [])]), ...HIDDEN_RULES];
   const FIELD_MAP = Object.fromEntries(ALL_FIELDS.map((f) => [f.key, f]));
 
   // v1.0 旧版通用教育字段 → v1.1 分学历字段（按最高学历决定落到本科/硕士/博士，旧键保留不删）
@@ -176,8 +201,61 @@
       const newK = base + suf;
       if ((p[oldK] || '').trim() && !(p[newK] || '').trim()) { p[newK] = p[oldK].trim(); changed = true; }
     }
+    // v1.1 及更早的整段实习/项目文本 → v1.2 多条结构（作为第 1 条的描述）
+    for (const [oldK, arrK] of [['internship', 'internships'], ['project', 'projects']]) {
+      if (typeof p[oldK] === 'string' && p[oldK].trim() &&
+        !(Array.isArray(p[arrK]) && p[arrK].some((e) => e && (e.desc || '').trim()))) {
+        p[arrK] = [{ org: '', role: '', period: '', desc: p[oldK].trim() }];
+        changed = true;
+      }
+    }
     if (changed) store.set('profile', p);
     return p;
+  }
+
+  // ------------------------------------------------------------------
+  // 多条经历（实习/项目）
+  // ------------------------------------------------------------------
+  const ENTRY_SUBS = ['org', 'role', 'period', 'desc'];
+
+  function entryList(profile, kind) {
+    const arr = profile[kind];
+    if (!Array.isArray(arr)) return [];
+    return arr.filter((e) => e && ENTRY_SUBS.some((s) => (e[s] || '').trim()));
+  }
+
+  function mergedText(list) {
+    return list.map((e) => {
+      const head = [e.org, e.role, e.period].map((s) => (s || '').trim()).filter(Boolean).join(' ｜ ');
+      const desc = (e.desc || '').trim();
+      return (head ? head + (desc ? '\n' : '') : '') + desc;
+    }).filter(Boolean).join('\n\n');
+  }
+
+  // 找表单自己的"添加实习/项目经历"按钮（点击后表单会新增一段空的经历块）
+  function findAddBtn(kind) {
+    const kw = kind === 'internships' ? ['实习', '工作经历', '经历'] : ['项目'];
+    const nodes = [...document.querySelectorAll('button, a, [role="button"], .btn, span')];
+    return nodes.find((b) => {
+      if (!isVisible(b) || inOwnUI(b)) return false;
+      const t = (textOf(b) || '').trim();
+      if (!t || t.length > 20) return false;
+      if (!/(添加|新增|增加|继续添加|再添加|添加一)/.test(t)) return false;
+      return kw.some((k) => t.includes(k));
+    });
+  }
+
+  // 重新扫描某 kind 的经历子字段控件（用于点击"添加"后找新块）
+  function scanEntryControls(kind, profile) {
+    const out = { org: [], role: [], period: [], desc: [] };
+    const ctrls = [...document.querySelectorAll('input, textarea, [contenteditable="true"], [contenteditable=""]')]
+      .filter((el) => !inOwnUI(el) && isVisible(el) && isEditable(el));
+    for (const el of ctrls) {
+      if ((el.value || '').trim() || (el.isContentEditable && textOf(el).trim())) continue; // 只要空控件
+      const rule = matchRuleFor(el, profile);
+      if (rule && rule.entry === kind) out[rule.sub].push(el);
+    }
+    return out;
   }
 
   // 选项同义词：让"本科"能命中"大学本科/Bachelor"，"男"能命中"M/Male"等
@@ -447,12 +525,60 @@
     return '';
   }
 
+  // 多条经历填写：第 i 条数据对位第 i 个经历块；表单槽位不够时点表单自己的"添加"按钮
+  async function fillEntries(profile, opts, buckets, push) {
+    const filled = new Set();
+    const labelKey = (kind, sub) => (kind === 'internships' ? 'intern_' + sub : 'project_' + (sub === 'org' ? 'name' : sub));
+    for (const kind of ['internships', 'projects']) {
+      const list = entryList(profile, kind);
+      if (!list.length) continue;
+      const fillIdxInto = (map, idx, offset = 0) => {
+        const e = list[idx];
+        let any = false;
+        for (const sub of ENTRY_SUBS) {
+          const el = map[sub] && map[sub][idx - offset];
+          const val = (e[sub] || '').trim();
+          if (!el || !val || filled.has(el)) continue;
+          if (opts.skipFilled && (el.value || '').trim()) continue;
+          filled.add(el);
+          if (opts.preview) { mark(el, 'preview'); push(labelKey(kind, sub), true, '(预览)'); }
+          else {
+            setValue(el, val);
+            el.dispatchEvent(new Event('blur', { bubbles: true }));
+            mark(el, true);
+            push(labelKey(kind, sub), true, val);
+          }
+          any = true;
+        }
+        return any;
+      };
+      // 先填已存在的经历块（各子字段按 DOM 顺序与第 i 条对位）
+      const slots = Math.max(0, ...ENTRY_SUBS.map((s) => (buckets[kind][s] || []).length));
+      let idx = 0;
+      for (; idx < Math.min(list.length, slots); idx++) fillIdxInto(buckets[kind], idx);
+      // 槽位不够：尝试点击表单的"添加"按钮扩展（防止死循环：没出现新块就停）
+      for (; idx < list.length; idx++) {
+        if (opts.preview) break;
+        const btn = findAddBtn(kind);
+        if (!btn) break;
+        btn.click();
+        await sleep(400);
+        const fresh = scanEntryControls(kind, profile);
+        const freshCount = Math.max(0, ...ENTRY_SUBS.map((s) => (fresh[s] || []).length));
+        if (!freshCount) break;
+        if (!fillIdxInto(fresh, idx, idx)) break;
+      }
+    }
+  }
+
   // ------------------------------------------------------------------
   // 核心：在当前 document 填写
   // ------------------------------------------------------------------
   async function fillDoc(profile, opts) {
     const results = [];
     const push = (key, ok, note) => results.push({ key, ok: !!ok, note: note || '' });
+    const buckets = { internships: {}, projects: {} };
+    const deferredBlobs = [];
 
     // 1) 单选组
     for (const [container, radios] of radioGroups()) {
@@ -479,6 +605,17 @@
 
       const rule = matchRuleFor(el, profile);
       if (!rule) continue;
+
+      // 经历子字段：进桶稍后逐条对位填写（见 fillEntries）
+      if (rule.entry) {
+        if (rule.long && tag !== 'TEXTAREA' && !el.isContentEditable) continue;
+        (buckets[rule.entry][rule.sub] = buckets[rule.entry][rule.sub] || []).push(el);
+        continue;
+      }
+
+      // 整段式经历文本框：先记账，页面没有结构化经历子字段时再合并多条填入
+      if (rule.blobOf && tag === 'TEXTAREA') { deferredBlobs.push({ el, kind: rule.blobOf }); continue; }
+
       const val = (profile[rule.key] || '').trim();
       if (!val) continue;
 
@@ -527,7 +664,23 @@
       push(rule.key, ok, ok ? val : '写入失败');
     }
 
-    // 3) choice 字段兜底：识别到了但前面没填上的（自定义下拉挂载在 div[role=combobox] 上的情况）
+    // 3) 多条经历：逐条对位填写；槽位不足时尝试点击表单的"添加"按钮
+    await fillEntries(profile, opts, buckets, push);
+
+    // 4) 整段式经历：页面没有结构化经历子字段时，把多条合并成一段填入
+    for (const { el, kind } of deferredBlobs) {
+      if (Object.values(buckets[kind]).some((a) => a && a.length)) continue;
+      const list = entryList(profile, kind);
+      if (!list.length) continue;
+      const key = kind === 'internships' ? 'internship' : 'project';
+      if (opts.preview) { mark(el, 'preview'); push(key, true, '(预览)多条合并'); continue; }
+      setValue(el, mergedText(list));
+      el.dispatchEvent(new Event('blur', { bubbles: true }));
+      mark(el, true);
+      push(key, true, list.length + ' 条合并填入');
+    }
+
+    // 5) choice 字段兜底：识别到了但前面没填上的（自定义下拉挂载在 div[role=combobox] 上的情况）
     if (!opts.preview) {
       const combos = [...document.querySelectorAll('[role="combobox"], [role="listbox"]')].filter((el) => isVisible(el) && !inOwnUI(el));
       for (const el of combos) {
@@ -601,6 +754,11 @@
   border: 1px solid #ddd; border-radius: 8px; padding: 6px 9px; font-size: 13px; font-family: inherit; outline: none; }
 #caf-panel .caf-row > input:focus, #caf-panel .caf-row > textarea:focus { border-color: #4f7cff; }
 #caf-panel textarea { min-height: 72px; resize: vertical; }
+#caf-panel .caf-entry { border: 1px solid #e8ebf3; border-radius: 10px; padding: 6px 10px 8px; margin: 8px 0; background: #fbfcff; }
+#caf-panel .caf-entry-head { display: flex; justify-content: space-between; align-items: center; color: #8a92a6; font-size: 12px; padding: 2px 0 4px; }
+#caf-panel .caf-entry-head button { all: unset; cursor: pointer; color: #e5484d; font-size: 12px; padding: 0 4px; }
+#caf-panel .caf-add { all: unset; cursor: pointer; display: block; text-align: center; border: 1px dashed #c8cede; border-radius: 8px; padding: 7px; color: #4f7cff; margin: 6px 0 2px; width: 100%; box-sizing: border-box; }
+#caf-panel .caf-add:hover { background: #f2f6ff; }
 #caf-panel .caf-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 #caf-panel .caf-actions button { all: unset; cursor: pointer; border-radius: 8px; padding: 7px 12px; font-size: 13px;
   background: #f2f4fa; color: #333; border: 1px solid #e3e6f0; }
@@ -720,7 +878,9 @@
         ${SECTIONS.map((s) => `
           <details ${s.title === '基本信息' ? 'open' : ''}>
             <summary>${s.title}</summary>
-            ${s.fields.map((f) => `<div class="caf-row"><label>${f.label}</label>${fieldInput(f)}</div>`).join('')}
+            ${s.type === 'entries'
+              ? `<div class="caf-entries" data-kind="${s.kind}"></div><button class="caf-add" data-add="${s.kind}">${s.addLabel}</button>`
+              : s.fields.map((f) => `<div class="caf-row"><label>${f.label}</label>${fieldInput(f)}</div>`).join('')}
           </details>`).join('')}
         <div class="caf-opts">
           <label><input type="checkbox" data-opt="preview"> 预览模式（只高亮不写入）</label>
@@ -741,6 +901,7 @@
     // 载入已存资料与选项
     const profile = loadProfile();
     panel.querySelectorAll('[data-key]').forEach((el) => { el.value = profile[el.dataset.key] || ''; });
+    panel.querySelectorAll('.caf-entries').forEach((box) => renderEntries(box, profile[box.dataset.kind] || []));
     panel.querySelectorAll('[data-opt]').forEach((el) => {
       el.checked = !!store.get(el.dataset.opt, false);
       el.addEventListener('change', () => {
@@ -750,6 +911,22 @@
     });
 
     panel.addEventListener('click', async (e) => {
+      const addBtn = e.target.closest && e.target.closest('[data-add]');
+      if (addBtn) {
+        const kind = addBtn.dataset.add;
+        const list = collectEntries(kind);
+        list.push({ org: '', role: '', period: '', desc: '' });
+        renderEntries(entriesBox(kind), list);
+        return;
+      }
+      const delBtn = e.target.closest && e.target.closest('.caf-entry-del');
+      if (delBtn) {
+        const kind = delBtn.dataset.kind;
+        const list = collectEntries(kind);
+        list.splice(parseInt(delBtn.dataset.idx, 10), 1);
+        renderEntries(entriesBox(kind), list);
+        return;
+      }
       const act = e.target && e.target.dataset && e.target.dataset.act;
       if (act === 'close') togglePanel(false);
       if (act === 'save') { saveProfile(); toast('✅ 资料已保存到本地'); }
@@ -786,8 +963,55 @@
     const panel = document.getElementById('caf-panel');
     const profile = loadProfile();
     panel.querySelectorAll('[data-key]').forEach((el) => { profile[el.dataset.key] = el.value.trim(); });
+    for (const kind of ['internships', 'projects']) {
+      profile[kind] = collectEntries(kind)
+        .map((e) => ({ org: e.org.trim(), role: e.role.trim(), period: e.period.trim(), desc: e.desc.trim() }))
+        .filter((e) => ENTRY_SUBS.some((s) => e[s]));
+    }
     store.set('profile', profile);
     return profile;
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  const ENTRY_FIELD_LABELS = {
+    internships: ['公司/单位', '职位', '起止时间', '描述'],
+    projects: ['项目名称', '角色/职责', '起止时间', '描述'],
+  };
+
+  function entriesBox(kind) {
+    return document.querySelector('.caf-entries[data-kind="' + kind + '"]');
+  }
+
+  function renderEntries(box, list) {
+    if (!box) return;
+    const kind = box.dataset.kind;
+    const labels = ENTRY_FIELD_LABELS[kind] || ENTRY_FIELD_LABELS.internships;
+    if (!list || !list.length) {
+      box.innerHTML = '<div style="color:#999;font-size:12px;padding:4px 0;">暂无，点击下方按钮添加</div>';
+      return;
+    }
+    box.innerHTML = list.map((e, i) => `
+      <div class="caf-entry">
+        <div class="caf-entry-head"><span>第 ${i + 1} 条</span><button class="caf-entry-del" data-kind="${kind}" data-idx="${i}">✕ 删除</button></div>
+        <div class="caf-row"><label>${labels[0]}</label><input data-esub="org" value="${esc(e.org)}"></div>
+        <div class="caf-row"><label>${labels[1]}</label><input data-esub="role" value="${esc(e.role)}"></div>
+        <div class="caf-row"><label>${labels[2]}</label><input data-esub="period" value="${esc(e.period)}"></div>
+        <div class="caf-row"><label>${labels[3]}</label><textarea data-esub="desc">${esc(e.desc)}</textarea></div>
+      </div>`).join('');
+  }
+
+  function collectEntries(kind) {
+    const box = entriesBox(kind);
+    if (!box) return [];
+    return [...box.querySelectorAll('.caf-entry')].map((entry) => ({
+      org: (entry.querySelector('[data-esub=org]') || {}).value || '',
+      role: (entry.querySelector('[data-esub=role]') || {}).value || '',
+      period: (entry.querySelector('[data-esub=period]') || {}).value || '',
+      desc: (entry.querySelector('[data-esub=desc]') || {}).value || '',
+    }));
   }
 
   function exportProfile() {
@@ -816,7 +1040,8 @@
 
   async function runFill() {
     const profile = saveProfile();
-    const filled = ALL_FIELDS.filter((f) => (profile[f.key] || '').trim()).length;
+    const filled = ALL_FIELDS.filter((f) => (profile[f.key] || '').trim()).length
+      + entryList(profile, 'internships').length + entryList(profile, 'projects').length;
     if (!filled) {
       togglePanel(true);
       toast('请先在面板中填写你的资料（至少一项）');
