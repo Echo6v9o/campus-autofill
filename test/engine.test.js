@@ -20,6 +20,7 @@ const FORM_HTML = `<!DOCTYPE html><html><body>
   <div class="row"><label>出生日期</label><input id="birth" type="date"></div>
   <div class="row"><label>毕业院校</label><input id="school"></div>
   <div class="row"><label>毕业时间</label><input id="grad"></div>
+  <div class="row"><label>入学时间</label><input id="entrance"></div>
   <!-- 2b. 分学历字段 -->
   <div class="row"><label>本科院校</label><input id="schoolB"></div>
   <div class="row"><label>硕士院校</label><input id="schoolM"></div>
@@ -60,6 +61,8 @@ const PROFILE = {
   school_m: '浙江大学', major_m: '人工智能',
   cet4: '560', cet6: '620', english: 'CET-6 620，可流利阅读英文文档',
   self_eval: '基础扎实，动手能力强。', ec_phone: '13900005678',
+  // v1.0 旧键：school 用于验证"新键优先"，entrance_date 用于验证"旧键自动迁移到 entrance_b"
+  school: '旧版学校（不应生效）', entrance_date: '2021-09',
 };
 
 (async () => {
@@ -109,7 +112,9 @@ const PROFILE = {
     ['手机号码（同级 label）', $('phone').value === '13800001234'],
     ['出生日期（date 归一化）', $('birth').value === '2002-05-20'],
     ['毕业院校（按最高学历路由到本科）', $('school').value === '杭州电子科技大学'],
+    ['毕业院校（旧键 school 不生效，新键优先）', $('school').value !== '旧版学校（不应生效）'],
     ['毕业时间（按最高学历路由到本科）', $('grad').value === '2025-06'],
+    ['入学时间（v1.0 旧键自动迁移到本科）', $('entrance').value === '2021-09'],
     ['本科院校（显式学历字段）', $('schoolB').value === '杭州电子科技大学'],
     ['硕士院校（显式学历字段）', $('schoolM').value === '浙江大学'],
     ['硕士研究方向', $('majorM').value === '人工智能'],

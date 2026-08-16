@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         校招一键填写助手（本地版）
 // @namespace    local.campus.autofill
-// @version      1.1.0
+// @version      1.1.1
 // @description  校招网申表单一键填写：简历信息保存在本地，智能识别姓名/性别/学校/实习经历等字段，兼容 React/Vue 受控表单、原生下拉、单选组和 iframe 内嵌表单。数据不上传任何服务器。
 // @author       local
 // @match        *://*/*
@@ -9,6 +9,8 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand
+// @downloadURL  https://cdn.jsdelivr.net/gh/Echo6v9o/campus-autofill@main/campus-autofill.user.js
+// @updateURL    https://cdn.jsdelivr.net/gh/Echo6v9o/campus-autofill@main/campus-autofill.user.js
 // ==/UserScript==
 
 (function () {
@@ -162,6 +164,21 @@
 
   const ALL_FIELDS = [...SECTIONS.flatMap((s) => s.fields), ...HIDDEN_RULES];
   const FIELD_MAP = Object.fromEntries(ALL_FIELDS.map((f) => [f.key, f]));
+
+  // v1.0 旧版通用教育字段 → v1.1 分学历字段（按最高学历决定落到本科/硕士/博士，旧键保留不删）
+  const OLD_KEY_MAP = { school: 'school', college: 'college', major: 'major', gpa: 'gpa', rank: 'rank', entrance_date: 'entrance', grad_date: 'grad' };
+  function loadProfile() {
+    const p = store.get('profile', {});
+    let changed = false;
+    const deg = norm(p.degree || '');
+    const suf = deg.includes('博士') ? '_p' : (deg.includes('硕士') || deg.includes('研究生')) ? '_m' : '_b';
+    for (const [oldK, base] of Object.entries(OLD_KEY_MAP)) {
+      const newK = base + suf;
+      if ((p[oldK] || '').trim() && !(p[newK] || '').trim()) { p[newK] = p[oldK].trim(); changed = true; }
+    }
+    if (changed) store.set('profile', p);
+    return p;
+  }
 
   // 选项同义词：让"本科"能命中"大学本科/Bachelor"，"男"能命中"M/Male"等
   const SYN = {
@@ -722,7 +739,7 @@
     document.getElementById(ROOT_ID).appendChild(panel);
 
     // 载入已存资料与选项
-    const profile = store.get('profile', {});
+    const profile = loadProfile();
     panel.querySelectorAll('[data-key]').forEach((el) => { el.value = profile[el.dataset.key] || ''; });
     panel.querySelectorAll('[data-opt]').forEach((el) => {
       el.checked = !!store.get(el.dataset.opt, false);
@@ -767,7 +784,7 @@
 
   function saveProfile() {
     const panel = document.getElementById('caf-panel');
-    const profile = store.get('profile', {});
+    const profile = loadProfile();
     panel.querySelectorAll('[data-key]').forEach((el) => { profile[el.dataset.key] = el.value.trim(); });
     store.set('profile', profile);
     return profile;
