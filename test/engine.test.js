@@ -20,6 +20,14 @@ const FORM_HTML = `<!DOCTYPE html><html><body>
   <div class="row"><label>出生日期</label><input id="birth" type="date"></div>
   <div class="row"><label>毕业院校</label><input id="school"></div>
   <div class="row"><label>毕业时间</label><input id="grad"></div>
+  <!-- 2b. 分学历字段 -->
+  <div class="row"><label>本科院校</label><input id="schoolB"></div>
+  <div class="row"><label>硕士院校</label><input id="schoolM"></div>
+  <div class="row"><label>硕士研究方向</label><input id="majorM"></div>
+  <!-- 2c. 英语成绩项 -->
+  <div class="row"><label>四级成绩</label><input id="cet4"></div>
+  <div class="row"><label>六级成绩</label><input id="cet6"></div>
+  <div class="row"><label>英语水平</label><input id="eng"></div>
   <!-- 3. 只有 placeholder -->
   <div><input id="email" placeholder="请输入邮箱"></div>
   <!-- 4. 原生下拉：学历（同义词匹配） -->
@@ -48,7 +56,9 @@ const FORM_HTML = `<!DOCTYPE html><html><body>
 const PROFILE = {
   name: '张三', gender: '男', birthdate: '2002-05-20', phone: '13800001234',
   email: 'zhangsan@example.com', political: '共青团员', ethnicity: '汉族',
-  school: '杭州电子科技大学', grad_date: '2025-06', degree: '本科',
+  degree: '本科', school_b: '杭州电子科技大学', major_b: '软件工程', grad_b: '2025-06',
+  school_m: '浙江大学', major_m: '人工智能',
+  cet4: '560', cet6: '620', english: 'CET-6 620，可流利阅读英文文档',
   self_eval: '基础扎实，动手能力强。', ec_phone: '13900005678',
 };
 
@@ -98,8 +108,14 @@ const PROFILE = {
     ['姓名触发 input 事件（React 兼容）', inputEvents === 1],
     ['手机号码（同级 label）', $('phone').value === '13800001234'],
     ['出生日期（date 归一化）', $('birth').value === '2002-05-20'],
-    ['毕业院校（不被当成毕业时间）', $('school').value === '杭州电子科技大学'],
-    ['毕业时间', $('grad').value === '2025-06'],
+    ['毕业院校（按最高学历路由到本科）', $('school').value === '杭州电子科技大学'],
+    ['毕业时间（按最高学历路由到本科）', $('grad').value === '2025-06'],
+    ['本科院校（显式学历字段）', $('schoolB').value === '杭州电子科技大学'],
+    ['硕士院校（显式学历字段）', $('schoolM').value === '浙江大学'],
+    ['硕士研究方向', $('majorM').value === '人工智能'],
+    ['四级成绩', $('cet4').value === '560'],
+    ['六级成绩', $('cet6').value === '620'],
+    ['英语水平（综合兜底）', $('eng').value === 'CET-6 620，可流利阅读英文文档'],
     ['邮箱（仅 placeholder 识别）', $('email').value === 'zhangsan@example.com'],
     ['学历（本科→大学本科 同义词）', $('degree').selectedOptions[0].textContent === '大学本科'],
     ['政治面貌', $('pol').value === 'b'],

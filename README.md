@@ -1,6 +1,6 @@
 # 校招一键填写助手 Campus Autofill
 
-> One-click autofill for campus recruitment application forms (Tampermonkey userscript). Stores your resume locally in the browser — no upload, no network requests. Smart field detection for 40+ common form fields, works with React/Vue controlled forms and iframes.
+> One-click autofill for campus recruitment application forms (Tampermonkey userscript). Stores your resume locally in the browser — no upload, no network requests. Smart field detection for 60+ common form fields, works with React/Vue controlled forms and iframes.
 
 一个油猴（Tampermonkey）脚本，用来对付校招网申"每家官网都要重新填一遍姓名、学校、实习经历"的问题。
 
@@ -10,7 +10,9 @@
 ## 功能
 
 - ⚡ **一键填写**：悬浮球 → 面板 → 「一键填写」，或直接按 `Alt+F`
-- 🧠 **智能识别字段**：按标签关键词匹配 40+ 常见校招字段（姓名、性别、政治面貌、学校、专业、GPA、四六级、实习/项目经历、自我评价、紧急联系人……），关键词按位置和长度消歧，"手机号"不会填进"紧急联系人电话"，"毕业院校"不会当成"毕业时间"
+- 🧠 **智能识别字段**：按标签关键词匹配 60+ 常见校招字段（姓名、性别、政治面貌、学校、专业、GPA、四六级、实习/项目经历、自我评价、紧急联系人……），关键词按位置和长度消歧，"手机号"不会填进"紧急联系人电话"，"毕业院校"不会当成"毕业时间"
+- 🎓 **教育背景分学历管理**：本科 / 硕士 / 博士 各自维护学校、学院、专业/研究方向、GPA、排名、入学与毕业时间；表单出现"本科院校/硕士专业"等字样直接对应填写，通用字段（如"毕业院校"）按表单上下文或你填的"最高学历"自动路由到对应学历
+- 🇬🇧 **英语水平结构化**：四级 / 六级 / 雅思 / 托福成绩独立填写，分别对应"四级成绩""雅思成绩"等字段；泛化的"英语水平"标签用综合描述兜底
 - ⚛️ **兼容 React/Vue 受控表单**：用原生 value setter + 派发 `input`/`change` 事件，Moka、北森、飞书招聘等系统直接改 value 不生效的问题已处理
 - 📝 **多控件类型**：文本框、多行文本、原生下拉（含"本科→大学本科/Bachelor"同义词匹配）、单选组（性别/政治面貌等）、日期框，以及对 antd/element 等组件库自定义下拉的兜底尝试
 - 🖼 **支持 iframe 内嵌表单**：很多网申页表单在 iframe 里，脚本会自动广播到所有子框架并汇总结果

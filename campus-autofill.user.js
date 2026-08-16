@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         校招一键填写助手（本地版）
 // @namespace    local.campus.autofill
-// @version      1.0.0
+// @version      1.1.0
 // @description  校招网申表单一键填写：简历信息保存在本地，智能识别姓名/性别/学校/实习经历等字段，兼容 React/Vue 受控表单、原生下拉、单选组和 iframe 内嵌表单。数据不上传任何服务器。
 // @author       local
 // @match        *://*/*
@@ -40,6 +40,9 @@
   //   exclude 出现在关键词【之前】时否决匹配（如"紧急联系人电话"不应填进"手机"）
   //   long    长文本，只填 textarea / contenteditable，避免把整段经历塞进"实习公司"这种单行框
   //   choice  选项类字段（单选组 / 自定义下拉兜底）
+  //   selectOnly 只接受下拉/单选，不直接填可编辑文本框（如"学历"）
+  //   byDegree 通用教育字段路由：按上下文中的"本科/硕士/博士"字样或最高学历路由到 _b/_m/_p
+  //   hidden  仅参与页面识别，不在面板中显示
   // ------------------------------------------------------------------
   const SECTIONS = [
     {
@@ -59,17 +62,50 @@
       ],
     },
     {
-      title: '教育背景',
+      title: '教育背景 · 通用',
       fields: [
-        { key: 'english', label: '英语水平', kws: ['大学英语', '英语水平', '英语等级', '外语水平', '六级', '四级', 'cet6', 'cet4', 'cet', '英语'], exclude: ['专业'] },
-        { key: 'rank', label: '成绩排名', kws: ['成绩排名', '排名', '名次'] },
-        { key: 'gpa', label: 'GPA/均分', kws: ['gpa', '绩点', '平均成绩', '平均分', '均分', '成绩'], exclude: ['排名', '名次', '英语'] },
-        { key: 'school', label: '学校', kws: ['毕业院校', '就读院校', '院校', '学校', '大学', 'university', 'school'], exclude: ['英语', '四级', '六级', '成绩', '排名'] },
-        { key: 'college', label: '学院/院系', kws: ['院系', '学院', '二级学院'] },
-        { key: 'major', label: '专业', kws: ['所学专业', '专业名称', '专业', 'major'], exclude: ['技能', '特长', '职务'] },
-        { key: 'degree', label: '学历（本科/硕士/博士）', choice: true, kws: ['最高学历', '学历', '学位', '文化程度', 'degree', 'education'], exclude: ['第一', '双学位'] },
-        { key: 'entrance_date', label: '入学时间', kws: ['入学时间', '入学年月', '入学年份', '入学'] },
-        { key: 'grad_date', label: '毕业时间', kws: ['毕业时间', '毕业年月', '毕业年份', '预计毕业', '毕业日期', '毕业', '届毕业生'], exclude: ['院校', '学校'] },
+        { key: 'degree', label: '最高学历（本科/硕士/博士）', choice: true, selectOnly: true, kws: ['最高学历', '学历', '学位', '文化程度', 'degree', 'education'], exclude: ['第一', '双学位'] },
+        { key: 'cet4', label: '四级(CET-4)成绩', kws: ['大学英语四级成绩', '英语四级成绩', '四级成绩', '四级分数', 'cet4', '英语四级', '大学英语四级', '四级'] },
+        { key: 'cet6', label: '六级(CET-6)成绩', kws: ['大学英语六级成绩', '英语六级成绩', '六级成绩', '六级分数', 'cet6', '英语六级', '大学英语六级', '六级'] },
+        { key: 'ielts', label: '雅思成绩', kws: ['雅思成绩', '雅思分数', '雅思', 'ielts'] },
+        { key: 'toefl', label: '托福成绩', kws: ['托福成绩', '托福分数', '托福', 'toefl'] },
+        { key: 'english', label: '英语水平（综合描述，兜底）', kws: ['大学英语', '英语水平', '英语等级', '外语水平', 'cet', '英语'], exclude: ['专业'] },
+      ],
+    },
+    {
+      title: '教育背景 · 本科',
+      fields: [
+        { key: 'school_b', label: '本科学校', kws: ['本科毕业院校', '本科就读院校', '本科院校', '本科学校', '本科大学'] },
+        { key: 'college_b', label: '本科学院/院系', kws: ['本科院系', '本科学院', '本科所在学院'] },
+        { key: 'major_b', label: '本科专业', kws: ['本科所学专业', '本科专业'] },
+        { key: 'gpa_b', label: '本科GPA/均分', kws: ['本科gpa', '本科绩点', '本科均分', '本科平均分', '本科平均成绩', '本科成绩'] },
+        { key: 'rank_b', label: '本科排名', kws: ['本科成绩排名', '本科排名', '本科名次'] },
+        { key: 'entrance_b', label: '本科入学时间', kws: ['本科入学时间', '本科入学年月', '本科入学年份', '本科入学'] },
+        { key: 'grad_b', label: '本科毕业时间', kws: ['本科毕业时间', '本科毕业年月', '本科毕业年份', '本科预计毕业', '本科毕业日期', '本科毕业'] },
+      ],
+    },
+    {
+      title: '教育背景 · 硕士',
+      fields: [
+        { key: 'school_m', label: '硕士学校', kws: ['硕士毕业院校', '研究生毕业院校', '硕士就读院校', '研究生就读院校', '硕士院校', '研究生院校', '硕士学校', '研究生学校', '硕士大学'] },
+        { key: 'college_m', label: '硕士学院/院系', kws: ['硕士院系', '硕士学院', '研究生院系', '研究生学院'] },
+        { key: 'major_m', label: '硕士专业/研究方向', kws: ['硕士研究生专业', '硕士专业', '研究生专业', '硕士研究方向', '硕士所学专业'] },
+        { key: 'gpa_m', label: '硕士GPA/均分', kws: ['硕士gpa', '硕士绩点', '硕士均分', '硕士平均分', '硕士平均成绩', '硕士成绩', '研究生gpa', '研究生成绩'] },
+        { key: 'rank_m', label: '硕士排名', kws: ['硕士成绩排名', '硕士排名', '硕士名次', '研究生排名'] },
+        { key: 'entrance_m', label: '硕士入学时间', kws: ['硕士入学时间', '硕士入学年月', '硕士入学年份', '硕士入学', '研究生入学'] },
+        { key: 'grad_m', label: '硕士毕业时间', kws: ['硕士毕业时间', '硕士毕业年月', '硕士毕业年份', '硕士预计毕业', '硕士毕业日期', '硕士毕业', '研究生毕业时间'] },
+      ],
+    },
+    {
+      title: '教育背景 · 博士',
+      fields: [
+        { key: 'school_p', label: '博士学校', kws: ['博士研究生毕业院校', '博士毕业院校', '博士就读院校', '博士院校', '博士学校', '博士大学', '博士研究生院校'] },
+        { key: 'college_p', label: '博士学院/院系', kws: ['博士院系', '博士学院', '博士所在学院'] },
+        { key: 'major_p', label: '博士专业/研究方向', kws: ['博士研究生专业', '博士专业', '博士研究方向', '博士所学专业'] },
+        { key: 'gpa_p', label: '博士GPA/均分', kws: ['博士gpa', '博士绩点', '博士均分', '博士平均分', '博士平均成绩', '博士成绩'] },
+        { key: 'rank_p', label: '博士排名', kws: ['博士成绩排名', '博士排名', '博士名次'] },
+        { key: 'entrance_p', label: '博士入学时间', kws: ['博士入学时间', '博士入学年月', '博士入学年份', '博士入学'] },
+        { key: 'grad_p', label: '博士毕业时间', kws: ['博士毕业时间', '博士毕业年月', '博士毕业年份', '博士预计毕业', '博士毕业日期', '博士毕业'] },
       ],
     },
     {
@@ -112,7 +148,19 @@
     },
   ];
 
-  const ALL_FIELDS = SECTIONS.flatMap((s) => s.fields);
+  // 隐藏路由规则：面板不显示，仅供页面识别。表单里出现"本科/硕士(研究生)/博士"字样时
+  // 路由到对应学历的数据；没有字样时按"最高学历"默认路由（byDegree）。
+  const HIDDEN_RULES = [
+    { key: 'school', hidden: true, byDegree: true, label: '学校', kws: ['毕业院校', '就读院校', '院校', '学校', '大学', 'university', 'school'], exclude: ['英语', '四级', '六级', '成绩', '排名'] },
+    { key: 'college', hidden: true, byDegree: true, label: '学院/院系', kws: ['院系', '学院', '二级学院'] },
+    { key: 'major', hidden: true, byDegree: true, label: '专业', kws: ['所学专业', '专业名称', '专业', '研究方向', 'major'], exclude: ['技能', '特长', '职务'] },
+    { key: 'gpa', hidden: true, byDegree: true, label: 'GPA/均分', kws: ['gpa', '绩点', '平均成绩', '平均分', '均分', '成绩'], exclude: ['排名', '名次', '英语', '四级', '六级', '雅思', '托福'] },
+    { key: 'rank', hidden: true, byDegree: true, label: '成绩排名', kws: ['成绩排名', '排名', '名次'] },
+    { key: 'entrance_date', hidden: true, byDegree: true, label: '入学时间', kws: ['入学时间', '入学年月', '入学年份', '入学'] },
+    { key: 'grad_date', hidden: true, byDegree: true, label: '毕业时间', kws: ['毕业时间', '毕业年月', '毕业年份', '预计毕业', '毕业日期', '毕业', '届毕业生'], exclude: ['院校', '学校'] },
+  ];
+
+  const ALL_FIELDS = [...SECTIONS.flatMap((s) => s.fields), ...HIDDEN_RULES];
   const FIELD_MAP = Object.fromEntries(ALL_FIELDS.map((f) => [f.key, f]));
 
   // 选项同义词：让"本科"能命中"大学本科/Bachelor"，"男"能命中"M/Male"等
@@ -207,12 +255,37 @@
     return { strong: strong.join(' '), weak: weak.join(' ') };
   }
 
-  function matchRuleFor(el) {
+  // 路由器键名 → 分学历字段基础名（school/gpa 等同名，grad_date→grad、entrance_date→entrance 需转换）
+  const DEGREE_BASE = { school: 'school', college: 'college', major: 'major', gpa: 'gpa', rank: 'rank', entrance_date: 'entrance', grad_date: 'grad' };
+
+  // 从上下文判断学历阶段：取最早出现的"本科/硕士(研究生)/博士"字样；
+  // 都没有时按用户填写的最高学历默认路由（本科兜底）
+  function degreeVariantOf(c, profile) {
+    const ctx = norm(c.strong + ' ' + c.weak);
+    const marks = [['_p', '博士'], ['_m', '硕士'], ['_m', '研究生'], ['_b', '本科']];
+    let best = '', bestPos = Infinity;
+    for (const [suf, kw] of marks) {
+      const p = ctx.indexOf(kw);
+      if (p >= 0 && p < bestPos) { bestPos = p; best = suf; }
+    }
+    if (best) return best;
+    const d = norm((profile && profile.degree) || '');
+    if (d.includes('博士')) return '_p';
+    if (d.includes('硕士') || d.includes('研究生')) return '_m';
+    return '_b';
+  }
+
+  function matchRuleFor(el, profile) {
     const c = ctxOf(el);
     // 黑名单（验证码等）对两层上下文全局生效，防止弱层文本绕过
     const all = (c.strong + ' ' + c.weak).toLowerCase();
     if (all.includes('验证码') || all.includes('captcha') || all.includes('verify')) return null;
-    return matchRule(c.strong) || matchRule(c.weak);
+    const rule = matchRule(c.strong) || matchRule(c.weak);
+    if (rule && rule.byDegree) {
+      const variant = FIELD_MAP[(DEGREE_BASE[rule.key] || rule.key) + degreeVariantOf(c, profile)];
+      if (variant) return variant;
+    }
+    return rule;
   }
 
   // 根据上下文匹配字段：关键词出现位置越靠前越优先；同位置取更长关键词；exclude 出现在关键词之前则否决
@@ -387,10 +460,13 @@
 
       if (tag === 'INPUT' && ['password', 'file', 'submit', 'button', 'reset', 'image', 'checkbox', 'radio', 'search'].includes(type)) continue;
 
-      const rule = matchRuleFor(el);
+      const rule = matchRuleFor(el, profile);
       if (!rule) continue;
       const val = (profile[rule.key] || '').trim();
       if (!val) continue;
+
+      // 选项类字段（如"学历"）不直接写可编辑文本框，避免把"本科"填进"最高学历毕业院校"这类输入框
+      if (rule.selectOnly && tag === 'INPUT' && !el.readOnly) continue;
 
       // 长文本规则不进单行 input（防止"实习公司"被塞整段经历）
       if (rule.long && tag !== 'TEXTAREA' && !el.isContentEditable) continue;
@@ -439,7 +515,7 @@
       const combos = [...document.querySelectorAll('[role="combobox"], [role="listbox"]')].filter((el) => isVisible(el) && !inOwnUI(el));
       for (const el of combos) {
         if (el.tagName === 'INPUT' && el.type !== 'text') continue;
-        const rule = matchRuleFor(el);
+        const rule = matchRuleFor(el, profile);
         if (!rule || !rule.choice) continue;
         const val = (profile[rule.key] || '').trim();
         if (!val) continue;
