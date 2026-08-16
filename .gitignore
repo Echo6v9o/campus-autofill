@@ -9,3 +9,6 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# 测试文件仅保留在本地，不同步仓库
+test/
