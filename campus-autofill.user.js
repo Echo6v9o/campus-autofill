@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         校招一键填写助手（本地版）
 // @namespace    local.campus.autofill
-// @version      1.6.1
+// @version      1.6.2
 // @description  校招网申表单一键填写：简历信息保存在本地，智能识别姓名/性别/学校/实习经历等字段，兼容 React/Vue 受控表单、原生下拉、单选组和 iframe 内嵌表单。数据不上传任何服务器。
 // @author       local
 // @match        *://*/*
@@ -857,12 +857,20 @@
   opacity: .55; transition: opacity .2s; }
 #caf-ball:hover { opacity: 1; }
 #caf-panel { position: fixed; z-index: 2147483601; top: 40px; right: 24px; width: 400px; max-width: calc(100vw - 32px);
-  max-height: calc(100vh - 80px); overflow: auto; background: #fff; border-radius: 14px; color: #222;
-  box-shadow: 0 12px 40px rgba(0,0,0,.18); font-size: 13px; }
-#caf-panel header { position: sticky; top: 0; background: linear-gradient(135deg, #4f7cff, #6a5cff);
-  color: #fff; padding: 12px 16px; font-size: 15px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+  max-height: calc(100vh - 80px); display: flex; flex-direction: column; overflow: hidden; background: #fff;
+  border-radius: 14px; color: #222; box-shadow: 0 12px 40px rgba(0,0,0,.18); font-size: 13px; }
+#caf-panel header { flex: 0 0 auto; background: linear-gradient(135deg, #4f7cff, #6a5cff); color: #fff; padding: 0; display: block; }
+#caf-panel .caf-head-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px;
+  font-size: 15px; font-weight: 600; }
 #caf-panel header button { all: unset; cursor: pointer; color: #fff; font-size: 16px; padding: 0 4px; }
-#caf-panel .caf-body { padding: 10px 16px 16px; }
+#caf-panel .caf-hint { padding: 6px 16px 9px; background: rgba(10,18,45,.22); color: #e9eeff;
+  font-size: 12px; line-height: 1.6; border-top: 1px solid rgba(255,255,255,.12); }
+#caf-panel .caf-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 10px 16px 16px;
+  scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: #c9d2ea transparent; }
+#caf-panel .caf-body::-webkit-scrollbar { width: 6px; }
+#caf-panel .caf-body::-webkit-scrollbar-thumb { background: #c9d2ea; border-radius: 3px; }
+#caf-panel .caf-body::-webkit-scrollbar-thumb:hover { background: #aab6d8; }
+#caf-panel .caf-body::-webkit-scrollbar-track { background: transparent; }
 #caf-panel details { border-bottom: 1px solid #f0f0f0; padding: 6px 0; }
 #caf-panel summary { cursor: pointer; font-weight: 600; padding: 4px 0; color: #333; }
 #caf-panel .caf-row { display: flex; align-items: flex-start; gap: 8px; margin: 6px 0; }
@@ -971,13 +979,14 @@
         document.documentElement.appendChild(badge);
       }
       const shortVal = pasteArm.value.length > 24 ? pasteArm.value.slice(0, 24) + '…' : pasteArm.value;
-      badge.innerHTML = '📍 点按粘贴 <b>' + esc(shortVal) + '</b>（Esc 取消）';
+      badge.innerHTML = '📍 点按粘贴 <b>' + esc(shortVal) + '</b>（点空白处/右键 取消）';
     }
     if (pasteWired) return;
     pasteWired = true;
     document.addEventListener('click', pasteClickHandler, true);
     document.addEventListener('mouseover', pasteHoverHandler, true);
     document.addEventListener('keydown', pasteEscHandler, true);
+    document.addEventListener('contextmenu', pasteContextHandler, true);
   }
 
   function unwirePasteUI() {
@@ -989,6 +998,7 @@
     document.removeEventListener('click', pasteClickHandler, true);
     document.removeEventListener('mouseover', pasteHoverHandler, true);
     document.removeEventListener('keydown', pasteEscHandler, true);
+    document.removeEventListener('contextmenu', pasteContextHandler, true);
   }
 
   function pasteEditable(el) {
@@ -1044,10 +1054,17 @@
   function pasteClickHandler(e) {
     if (!pasteArm) return;
     const t = pasteEditable(e.target);
-    if (!t || !pasteEligible(t)) return;
-    fillPendingInto(t);
-    // Ctrl/Cmd+点击：保持模式连续填多个框；普通点击填完自动退出
-    if (!(e.ctrlKey || e.metaKey)) broadcastDisarm();
+    if (t) {
+      if (!pasteEligible(t)) return; // 密码/验证码等不可填控件：保持模式不动作
+      fillPendingInto(t);
+      // Ctrl/Cmd+点击：保持模式连续填多个框；普通点击填完自动退出
+      if (!(e.ctrlKey || e.metaKey)) broadcastDisarm();
+      return;
+    }
+    // 无输入框目标：点空白/非输入区域 = 放弃模式（"点别处即取消"）
+    // 自己的面板/徽标、label（会转发为对输入框的点击）除外
+    if (e.target && e.target.closest && (inOwnUI(e.target) || e.target.closest('label'))) return;
+    broadcastDisarm();
   }
 
   function pasteHoverHandler(e) {
@@ -1060,6 +1077,13 @@
   function pasteEscHandler(e) {
     if (e.key !== 'Escape' || !pasteArm) return;
     broadcastDisarm();
+  }
+
+  // 右键取消点填模式：模式激活期间右键就是纯取消手势，拦截浏览器菜单避免"取消完还弹菜单"的二次操作
+  function pasteContextHandler(e) {
+    if (!pasteArm) return;
+    broadcastDisarm();
+    try { e.preventDefault(); } catch (err) {}
   }
 
   function buildUI() {
@@ -1168,7 +1192,10 @@
     panel.id = 'caf-panel';
     panel.style.display = 'none';
     panel.innerHTML = `
-      <header><span>📝 校招一键填写</span><button data-act="close">✕</button></header>
+      <header>
+        <div class="caf-head-row"><span>📝 校招一键填写</span><button data-act="close">✕</button></div>
+        <div class="caf-hint">💡 点填：点字段旁「复制」→ 再点网页输入框直接粘贴（Ctrl+点击可连填；点空白处 / 右键 / Esc 取消）</div>
+      </header>
       <div class="caf-body">
         ${SECTIONS.map((s) => `
           <details ${s.title === '基本信息' ? 'open' : ''}>
@@ -1268,7 +1295,8 @@
     const p = document.getElementById('caf-panel');
     if (!p) return;
     const show = forceOpen === true ? true : forceOpen === false ? false : p.style.display === 'none';
-    p.style.display = show ? 'block' : 'none';
+    // 注意必须是 flex：面板布局为 flex 列（固定头部 + 滚动内容区），写 block 会破坏滚动
+    p.style.display = show ? 'flex' : 'none';
   }
 
   function saveProfile() {
