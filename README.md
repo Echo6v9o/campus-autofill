@@ -1,0 +1,70 @@
+# 校招一键填写助手 Campus Autofill
+
+> One-click autofill for campus recruitment application forms (Tampermonkey userscript). Stores your resume locally in the browser — no upload, no network requests. Smart field detection for 40+ common form fields, works with React/Vue controlled forms and iframes.
+
+一个油猴（Tampermonkey）脚本，用来对付校招网申"每家官网都要重新填一遍姓名、学校、实习经历"的问题。
+
+**所有资料只保存在你浏览器本地（油猴脚本存储），不联网、不上传。**
+**All data stays in your browser (Tampermonkey storage). Nothing is ever sent anywhere.**
+
+## 功能
+
+- ⚡ **一键填写**：悬浮球 → 面板 → 「一键填写」，或直接按 `Alt+F`
+- 🧠 **智能识别字段**：按标签关键词匹配 40+ 常见校招字段（姓名、性别、政治面貌、学校、专业、GPA、四六级、实习/项目经历、自我评价、紧急联系人……），关键词按位置和长度消歧，"手机号"不会填进"紧急联系人电话"，"毕业院校"不会当成"毕业时间"
+- ⚛️ **兼容 React/Vue 受控表单**：用原生 value setter + 派发 `input`/`change` 事件，Moka、北森、飞书招聘等系统直接改 value 不生效的问题已处理
+- 📝 **多控件类型**：文本框、多行文本、原生下拉（含"本科→大学本科/Bachelor"同义词匹配）、单选组（性别/政治面貌等）、日期框，以及对 antd/element 等组件库自定义下拉的兜底尝试
+- 🖼 **支持 iframe 内嵌表单**：很多网申页表单在 iframe 里，脚本会自动广播到所有子框架并汇总结果
+- 👀 **预览模式**：只高亮将要填写的字段（蓝色），不写入，先看后填
+- 📤 **导入/导出 JSON**：换电脑、多台设备同步资料
+- 🚫 **不覆盖已填内容**选项、验证码/密码框自动跳过、填写结果绿色高亮 + 明细日志
+
+## 安装（约 2 分钟）
+
+1. 浏览器安装 [Tampermonkey](https://www.tampermonkey.net/)（Chrome/Edge 用，Edge 也可装 [暴力猴 Violentmonkey](https://violentmonkey.github.io/)）
+2. 点击浏览器工具栏油猴图标 → 「添加新脚本」→ 全选删除 → 把 `campus-autofill.user.js` 的内容整个粘贴进去 → `Ctrl+S` 保存
+   - 或者：把 `campus-autofill.user.js` 文件直接拖进浏览器（Tampermonkey 会弹出安装确认）
+3. 打开任意校招网申页（如 `app.mokahr.com`、牛客网投递页等）
+
+## 使用
+
+1. 第一次使用：按 `Alt+E`（或点击页面右侧悬浮球 📝）打开面板，把自己的资料填进去，点「💾 保存资料」
+   - 懒得手打：可以先「📥 导入」`my-profile.example.json`，再在面板里改成自己的内容
+2. 打开某个公司的网申表单页，按 `Alt+F` 一键填写
+   - 不放心就先勾「预览模式」跑一遍，蓝色框确认无误后取消勾选再填
+3. 面板底部日志会显示每项的填写结果；绿色 = 已填，黄色虚线框 = 识别到了但写入失败（通常是特殊自定义控件），手动补一下即可
+
+悬浮球只在"页面上有 ≥3 个可见表单控件"时出现，平时不打扰；也可以在面板里勾「隐藏悬浮球」，之后用 `Alt+E` / 油猴菜单唤出。
+
+## 快捷键
+
+| 快捷键 | 功能 |
+|---|---|
+| `Alt+F` | 一键填写 |
+| `Alt+E` | 打开/关闭资料面板 |
+
+油猴菜单里也有：⚡ 一键填写 / ✏️ 编辑资料面板 / 📤 导出资料。
+
+## 已知限制（网申系统的锅，属于正常现象）
+
+- 上传附件（简历 PDF、证件照文件）无法自动传，浏览器安全限制，必须手动选文件
+- 部分深度定制的下拉/级联选择器（如省市区三级联动）可能识别不到，脚本会标黄提醒
+- "实习经历"等长文本只填多行文本框，不会塞进"实习公司"这种单行框（防止填错）
+- 个别网站用非标准组件或 Canvas 渲染表单时无法识别，手动填即可
+
+## 自定义扩展
+
+字段关键词都集中在脚本顶部的 `SECTIONS` 配置里，想加字段或加关键词（比如某网站把手机叫"移动号码"）直接往对应字段的 `kws` 数组里加即可，保存后刷新页面生效。
+
+## 隐私
+
+- 脚本 `@match *://*/*` 只是为了能在任意网申站运行，**没有任何网络请求**，全部逻辑在本地执行
+- 资料存于油猴脚本存储（GM_setValue），只在你的浏览器里；导出的 JSON 请自己妥善保管，别发群里
+
+## 参考的现有方案
+
+本工具综合了以下公开方案的思路（关键词匹配 + 原生 setter 触发框架更新 + iframe 广播）：
+
+- [zhuzhipeng-123/resume-auto-fill](https://github.com/zhuzhipeng-123/resume-auto-fill)（油猴脚本类）
+- [28H2O2/OnceResume](https://github.com/28H2O2/OnceResume)（一键填写插件）
+- [OfferNow 简历闪填](https://github.com/ruanyf/weekly/issues/8577)、[OpenJobAutofill](https://github.com/ruanyf/weekly/issues/9881)（AI 填表插件，本工具做成了无 AI、纯本地的版本）
+- [求职喵](https://qiuzhimiao.cn/auto-resume/)、[简历自动填写助手（Chrome 商店）](https://chromewebstore.google.com/detail/%E7%AE%80%E5%8E%86%E8%87%AA%E5%8A%A8%E5%A1%AB%E5%86%99%E5%8A%A9%E6%89%8B/pplphmnbdjnholichjplcgakhlmanakp?hl=zh-CN)

@@ -1,0 +1,21 @@
+{
+  "name": "campus-autofill",
+  "version": "1.0.0",
+  "description": "Campus recruitment form autofill userscript | 校招网申一键填写油猴脚本",
+  "main": "campus-autofill.user.js",
+  "scripts": {
+    "test": "node test/engine.test.js"
+  },
+  "keywords": [
+    "tampermonkey",
+    "userscript",
+    "campus-recruitment",
+    "resume",
+    "autofill"
+  ],
+  "license": "MIT",
+  "type": "commonjs",
+  "devDependencies": {
+    "jsdom": "^29.1.1"
+  }
+}
