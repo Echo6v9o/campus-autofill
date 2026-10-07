@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         校招一键填写助手（本地版）
 // @namespace    local.campus.autofill
-// @version      1.8.0
+// @version      1.8.1
 // @description  校招网申表单一键填写：简历信息保存在本地，智能识别姓名/性别/学校/实习经历等字段，兼容 React/Vue 受控表单、原生下拉、单选组和 iframe 内嵌表单。数据不上传任何服务器。
 // @author       local
 // @match        *://*/*
@@ -61,6 +61,15 @@
         { key: 'native_place', label: '籍贯/户口所在地', kws: ['籍贯', '生源地', '出生地', '户口所在地', '户籍所在地', '户籍', '户口'] },
         { key: 'current_city', label: '现居城市', kws: ['现居住地', '现居城市', '居住城市', '居住地', '所在城市', '常驻城市', '现居', '目前所在'] },
         { key: 'marital', label: '婚姻状况', choice: true, kws: ['婚姻', '婚否', '结婚'] },
+        // 家庭成员（parentScope: 裸标签仅在上下文判定为对应家长时参与匹配）
+        { key: 'father_name', label: '父亲姓名', parentScope: 'father', kws: ['父亲姓名', '父亲名字', '姓名', '名字'] },
+        { key: 'father_org', label: '父亲工作单位', parentScope: 'father', kws: ['父亲工作单位', '父亲单位', '父亲所在单位', '工作单位', '单位', '任职单位', '所在单位'] },
+        { key: 'father_job', label: '父亲职务', parentScope: 'father', kws: ['父亲职务', '父亲职位', '职务', '职位'] },
+        { key: 'father_phone', label: '父亲联系电话', parentScope: 'father', kws: ['父亲联系电话', '父亲电话', '父亲手机', '联系电话', '电话', '手机'] },
+        { key: 'mother_name', label: '母亲姓名', parentScope: 'mother', kws: ['母亲姓名', '母亲名字', '姓名', '名字'] },
+        { key: 'mother_org', label: '母亲工作单位', parentScope: 'mother', kws: ['母亲工作单位', '母亲单位', '母亲所在单位', '工作单位', '单位', '任职单位', '所在单位'] },
+        { key: 'mother_job', label: '母亲职务', parentScope: 'mother', kws: ['母亲职务', '母亲职位', '职务', '职位'] },
+        { key: 'mother_phone', label: '母亲联系电话', parentScope: 'mother', kws: ['母亲联系电话', '母亲电话', '母亲手机', '联系电话', '电话', '手机'] },
       ],
     },
     {
@@ -167,20 +176,6 @@
         { key: 'ec_name', label: '紧急联系人姓名', kws: ['紧急联系人姓名', '紧急联系人', '联系人姓名'], exclude: ['电话', '关系'] },
         { key: 'ec_relation', label: '与本人关系', kws: ['与本人关系', '联系人关系', '关系'], exclude: ['紧急联系人姓名', '电话'] },
         { key: 'ec_phone', label: '紧急联系人电话', kws: ['紧急联系人电话', '紧急联系方式', '紧急联系电话', '家庭电话', '家长电话', '联系人电话', '联系人手机'] },
-      ],
-    },
-    {
-      title: '家庭成员',
-      // parentScope: 裸标签（姓名/工作单位/职务/联系电话）仅在上下文判定为对应家长时参与匹配
-      fields: [
-        { key: 'father_name', label: '父亲姓名', parentScope: 'father', kws: ['父亲姓名', '父亲名字', '姓名', '名字'] },
-        { key: 'father_org', label: '父亲工作单位', parentScope: 'father', kws: ['父亲工作单位', '父亲单位', '父亲所在单位', '工作单位', '单位', '任职单位', '所在单位'] },
-        { key: 'father_job', label: '父亲职务', parentScope: 'father', kws: ['父亲职务', '父亲职位', '职务', '职位'] },
-        { key: 'father_phone', label: '父亲联系电话', parentScope: 'father', kws: ['父亲联系电话', '父亲电话', '父亲手机', '联系电话', '电话', '手机'] },
-        { key: 'mother_name', label: '母亲姓名', parentScope: 'mother', kws: ['母亲姓名', '母亲名字', '姓名', '名字'] },
-        { key: 'mother_org', label: '母亲工作单位', parentScope: 'mother', kws: ['母亲工作单位', '母亲单位', '母亲所在单位', '工作单位', '单位', '任职单位', '所在单位'] },
-        { key: 'mother_job', label: '母亲职务', parentScope: 'mother', kws: ['母亲职务', '母亲职位', '职务', '职位'] },
-        { key: 'mother_phone', label: '母亲联系电话', parentScope: 'mother', kws: ['母亲联系电话', '母亲电话', '母亲手机', '联系电话', '电话', '手机'] },
       ],
     },
     {
