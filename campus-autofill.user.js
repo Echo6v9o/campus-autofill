@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         校招一键填写助手（本地版）
 // @namespace    local.campus.autofill
-// @version      1.6.2
+// @version      1.7.0
 // @description  校招网申表单一键填写：简历信息保存在本地，智能识别姓名/性别/学校/实习经历等字段，兼容 React/Vue 受控表单、原生下拉、单选组和 iframe 内嵌表单。数据不上传任何服务器。
 // @author       local
 // @match        *://*/*
@@ -132,6 +132,8 @@
         { key: 'intern_role', label: '实习职位', entry: 'internships', sub: 'role', kws: ['实习职位', '实习岗位名称', '实习岗位', '实习职务', '担任职务', '职位名称', '岗位名称', '职务', '职位'] },
         { key: 'intern_period', label: '实习起止时间', entry: 'internships', sub: 'period', kws: ['实习起止时间', '实习时间段', '实习时间', '实习期间', '起止时间'] },
         { key: 'intern_desc', label: '实习工作内容', entry: 'internships', sub: 'desc', long: true, kws: ['实习经历描述', '工作内容', '实习内容', '实习描述', '主要工作', '工作描述', '职责描述', '实习职责', '工作职责'] },
+        { key: 'intern_ref_name', label: '实习证明人', entry: 'internships', sub: 'ref_name', kws: ['证明人姓名', '实习证明人', '证明人'] },
+        { key: 'intern_ref_contact', label: '证明人联系方式', entry: 'internships', sub: 'ref_contact', kws: ['证明人联系方式', '证明人电话', '证明人手机', '证明人联系'] },
       ],
     },
     {
@@ -144,6 +146,8 @@
         { key: 'project_role', label: '项目角色', entry: 'projects', sub: 'role', kws: ['项目担任角色', '项目角色', '项目职务', '项目中职务', '担任角色'] },
         { key: 'project_period', label: '项目起止时间', entry: 'projects', sub: 'period', kws: ['项目起止时间', '项目时间段', '项目时间', '项目周期'] },
         { key: 'project_desc', label: '项目描述', entry: 'projects', sub: 'desc', long: true, kws: ['项目描述', '项目内容', '项目简介', '项目详情', '项目说明'] },
+        { key: 'project_ref_name', label: '项目证明人', entry: 'projects', sub: 'ref_name', kws: ['证明人姓名', '项目证明人', '证明人'] },
+        { key: 'project_ref_contact', label: '证明人联系方式', entry: 'projects', sub: 'ref_contact', kws: ['证明人联系方式', '证明人电话', '证明人手机', '证明人联系'] },
       ],
     },
     {
@@ -218,7 +222,7 @@
   // ------------------------------------------------------------------
   // 多条经历（实习/项目）
   // ------------------------------------------------------------------
-  const ENTRY_SUBS = ['org', 'role', 'period', 'desc'];
+  const ENTRY_SUBS = ['org', 'role', 'period', 'desc', 'ref_name', 'ref_contact'];
 
   function entryList(profile, kind) {
     const arr = profile[kind];
@@ -229,8 +233,11 @@
   function mergedText(list) {
     return list.map((e) => {
       const head = [e.org, e.role, e.period].map((s) => (s || '').trim()).filter(Boolean).join(' ｜ ');
+      const ref = [e.ref_name, e.ref_contact].map((s) => (s || '').trim()).filter(Boolean).join('，');
       const desc = (e.desc || '').trim();
-      return (head ? head + (desc ? '\n' : '') : '') + desc;
+      return (head ? head + (desc || ref ? '\n' : '') : '')
+        + desc
+        + (ref ? (desc ? '\n' : '') + '（证明人：' + ref + '）' : '');
     }).filter(Boolean).join('\n\n');
   }
 
@@ -249,7 +256,8 @@
 
   // 重新扫描某 kind 的经历子字段控件（用于点击"添加"后找新块）
   function scanEntryControls(kind, profile) {
-    const out = { org: [], role: [], period: [], desc: [] };
+    const out = {};
+    ENTRY_SUBS.forEach((s) => { out[s] = []; });
     const ctrls = [...document.querySelectorAll('input, textarea, [contenteditable="true"], [contenteditable=""]')]
       .filter((el) => !inOwnUI(el) && isVisible(el) && isEditable(el));
     for (const el of ctrls) {
@@ -1305,7 +1313,7 @@
     panel.querySelectorAll('[data-key]').forEach((el) => { profile[el.dataset.key] = el.value.trim(); });
     for (const kind of ['internships', 'projects']) {
       profile[kind] = collectEntries(kind)
-        .map((e) => ({ org: e.org.trim(), role: e.role.trim(), period: e.period.trim(), desc: e.desc.trim() }))
+        .map((e) => ({ org: e.org.trim(), role: e.role.trim(), period: e.period.trim(), desc: e.desc.trim(), ref_name: (e.ref_name || '').trim(), ref_contact: (e.ref_contact || '').trim() }))
         .filter((e) => ENTRY_SUBS.some((s) => e[s]));
     }
     store.set('profile', profile);
@@ -1317,8 +1325,8 @@
   }
 
   const ENTRY_FIELD_LABELS = {
-    internships: ['公司/单位', '职位', '起止时间', '描述'],
-    projects: ['项目名称', '角色/职责', '起止时间', '描述'],
+    internships: ['公司/单位', '职位', '起止时间', '描述', '证明人', '证明人联系方式'],
+    projects: ['项目名称', '角色/职责', '起止时间', '描述', '证明人', '证明人联系方式'],
   };
 
   function entriesBox(kind) {
@@ -1340,6 +1348,8 @@
         <div class="caf-row"><label>${labels[1]}</label><input data-esub="role" value="${esc(e.role)}">${COPY_BTN}</div>
         <div class="caf-row"><label>${labels[2]}</label><input data-esub="period" value="${esc(e.period)}">${COPY_BTN}</div>
         <div class="caf-row"><label>${labels[3]}</label><textarea data-esub="desc">${esc(e.desc)}</textarea>${COPY_BTN}</div>
+        <div class="caf-row"><label>${labels[4]}</label><input data-esub="ref_name" value="${esc(e.ref_name)}">${COPY_BTN}</div>
+        <div class="caf-row"><label>${labels[5]}</label><input data-esub="ref_contact" value="${esc(e.ref_contact)}">${COPY_BTN}</div>
       </div>`).join('');
   }
 
@@ -1351,6 +1361,8 @@
       role: (entry.querySelector('[data-esub=role]') || {}).value || '',
       period: (entry.querySelector('[data-esub=period]') || {}).value || '',
       desc: (entry.querySelector('[data-esub=desc]') || {}).value || '',
+      ref_name: (entry.querySelector('[data-esub=ref_name]') || {}).value || '',
+      ref_contact: (entry.querySelector('[data-esub=ref_contact]') || {}).value || '',
     }));
   }
 
