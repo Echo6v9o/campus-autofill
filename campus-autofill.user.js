@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         校招一键填写助手（本地版）
 // @namespace    local.campus.autofill
-// @version      1.8.1
+// @version      1.9.0
 // @description  校招网申表单一键填写：简历信息保存在本地，智能识别姓名/性别/学校/实习经历等字段，兼容 React/Vue 受控表单、原生下拉、单选组和 iframe 内嵌表单。数据不上传任何服务器。
 // @author       local
 // @match        *://*/*
@@ -91,6 +91,7 @@
         { key: 'major_b', label: '本科专业', kws: ['本科所学专业', '本科专业'] },
         { key: 'gpa_b', label: '本科GPA/均分', kws: ['本科gpa', '本科绩点', '本科均分', '本科平均分', '本科平均成绩', '本科成绩'] },
         { key: 'rank_b', label: '本科排名', kws: ['本科成绩排名', '本科排名', '本科名次'] },
+        { key: 'course_b', label: '本科主修课程', long: true, kws: ['本科主修课程', '本科主要课程', '本科所学课程', '本科核心课程', '本科课程', '本科主修'] },
         { key: 'entrance_b', label: '本科入学时间', kws: ['本科入学时间', '本科入学年月', '本科入学年份', '本科入学'] },
         { key: 'grad_b', label: '本科毕业时间', kws: ['本科毕业时间', '本科毕业年月', '本科毕业年份', '本科预计毕业', '本科毕业日期', '本科毕业'] },
       ],
@@ -105,6 +106,7 @@
         { key: 'lab_m', label: '实验室', kws: ['实验室名称', '所在实验室', '所属实验室', '实验室'] },
         { key: 'gpa_m', label: '硕士GPA/均分', kws: ['硕士gpa', '硕士绩点', '硕士均分', '硕士平均分', '硕士平均成绩', '硕士成绩', '研究生gpa', '研究生成绩'] },
         { key: 'rank_m', label: '硕士排名', kws: ['硕士成绩排名', '硕士排名', '硕士名次', '研究生排名'] },
+        { key: 'course_m', label: '硕士主修课程', long: true, kws: ['硕士主修课程', '硕士主要课程', '硕士所学课程', '硕士核心课程', '硕士课程', '研究生主修课程', '研究生主要课程', '研究生课程', '硕士主修'] },
         { key: 'entrance_m', label: '硕士入学时间', kws: ['硕士入学时间', '硕士入学年月', '硕士入学年份', '硕士入学', '研究生入学'] },
         { key: 'grad_m', label: '硕士毕业时间', kws: ['硕士毕业时间', '硕士毕业年月', '硕士毕业年份', '硕士预计毕业', '硕士毕业日期', '硕士毕业', '研究生毕业时间'] },
       ],
@@ -117,6 +119,7 @@
         { key: 'major_p', label: '博士专业/研究方向', kws: ['博士研究生专业', '博士专业', '博士研究方向', '博士所学专业'] },
         { key: 'gpa_p', label: '博士GPA/均分', kws: ['博士gpa', '博士绩点', '博士均分', '博士平均分', '博士平均成绩', '博士成绩'] },
         { key: 'rank_p', label: '博士排名', kws: ['博士成绩排名', '博士排名', '博士名次'] },
+        { key: 'course_p', label: '博士主修课程', long: true, kws: ['博士主修课程', '博士主要课程', '博士所学课程', '博士核心课程', '博士课程', '博士主修'] },
         { key: 'entrance_p', label: '博士入学时间', kws: ['博士入学时间', '博士入学年月', '博士入学年份', '博士入学'] },
         { key: 'grad_p', label: '博士毕业时间', kws: ['博士毕业时间', '博士毕业年月', '博士毕业年份', '博士预计毕业', '博士毕业日期', '博士毕业'] },
       ],
@@ -197,6 +200,7 @@
     { key: 'rank', hidden: true, byDegree: true, label: '成绩排名', kws: ['成绩排名', '排名', '名次'] },
     { key: 'entrance_date', hidden: true, byDegree: true, label: '入学时间', kws: ['入学时间', '入学年月', '入学年份', '入学'] },
     { key: 'grad_date', hidden: true, byDegree: true, label: '毕业时间', kws: ['毕业时间', '毕业年月', '毕业年份', '预计毕业', '毕业日期', '毕业', '届毕业生'], exclude: ['院校', '学校'] },
+    { key: 'course', hidden: true, byDegree: true, long: true, label: '主修课程', kws: ['主修课程', '主要课程', '所学课程', '核心课程', '主修', '课程'], exclude: ['培训', '已修学分'] },
     // 整段式经历（老式表单只有一个大文本框）：多条经历按条合并后填入
     { key: 'internship', hidden: true, long: true, blobOf: 'internships', label: '实习经历（多条合并）', kws: ['实习经历', '工作经历', '工作/实习', '实习信息', '实践经历', '社会实践', '实习'] },
     { key: 'project', hidden: true, long: true, blobOf: 'projects', label: '项目经历（多条合并）', kws: ['项目经历', '项目经验', '项目'] },
@@ -370,7 +374,7 @@
   }
 
   // 路由器键名 → 分学历字段基础名（school/gpa 等同名，grad_date→grad、entrance_date→entrance 需转换）
-  const DEGREE_BASE = { school: 'school', college: 'college', major: 'major', gpa: 'gpa', rank: 'rank', entrance_date: 'entrance', grad_date: 'grad' };
+  const DEGREE_BASE = { school: 'school', college: 'college', major: 'major', gpa: 'gpa', rank: 'rank', entrance_date: 'entrance', grad_date: 'grad', course: 'course' };
 
   // 从上下文判断学历阶段：取最早出现的"本科/硕士(研究生)/博士"字样；
   // 都没有时按用户填写的最高学历默认路由（本科兜底）
