@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         校招一键填写助手（本地版）
 // @namespace    local.campus.autofill
-// @version      1.7.0
+// @version      1.8.0
 // @description  校招网申表单一键填写：简历信息保存在本地，智能识别姓名/性别/学校/实习经历等字段，兼容 React/Vue 受控表单、原生下拉、单选组和 iframe 内嵌表单。数据不上传任何服务器。
 // @author       local
 // @match        *://*/*
@@ -167,6 +167,20 @@
         { key: 'ec_name', label: '紧急联系人姓名', kws: ['紧急联系人姓名', '紧急联系人', '联系人姓名'], exclude: ['电话', '关系'] },
         { key: 'ec_relation', label: '与本人关系', kws: ['与本人关系', '联系人关系', '关系'], exclude: ['紧急联系人姓名', '电话'] },
         { key: 'ec_phone', label: '紧急联系人电话', kws: ['紧急联系人电话', '紧急联系方式', '紧急联系电话', '家庭电话', '家长电话', '联系人电话', '联系人手机'] },
+      ],
+    },
+    {
+      title: '家庭成员',
+      // parentScope: 裸标签（姓名/工作单位/职务/联系电话）仅在上下文判定为对应家长时参与匹配
+      fields: [
+        { key: 'father_name', label: '父亲姓名', parentScope: 'father', kws: ['父亲姓名', '父亲名字', '姓名', '名字'] },
+        { key: 'father_org', label: '父亲工作单位', parentScope: 'father', kws: ['父亲工作单位', '父亲单位', '父亲所在单位', '工作单位', '单位', '任职单位', '所在单位'] },
+        { key: 'father_job', label: '父亲职务', parentScope: 'father', kws: ['父亲职务', '父亲职位', '职务', '职位'] },
+        { key: 'father_phone', label: '父亲联系电话', parentScope: 'father', kws: ['父亲联系电话', '父亲电话', '父亲手机', '联系电话', '电话', '手机'] },
+        { key: 'mother_name', label: '母亲姓名', parentScope: 'mother', kws: ['母亲姓名', '母亲名字', '姓名', '名字'] },
+        { key: 'mother_org', label: '母亲工作单位', parentScope: 'mother', kws: ['母亲工作单位', '母亲单位', '母亲所在单位', '工作单位', '单位', '任职单位', '所在单位'] },
+        { key: 'mother_job', label: '母亲职务', parentScope: 'mother', kws: ['母亲职务', '母亲职位', '职务', '职位'] },
+        { key: 'mother_phone', label: '母亲联系电话', parentScope: 'mother', kws: ['母亲联系电话', '母亲电话', '母亲手机', '联系电话', '电话', '手机'] },
       ],
     },
     {
@@ -380,12 +394,44 @@
     return '_b';
   }
 
+  // 上下文中的家长归属：'父亲/爸爸' → father，'母亲/妈妈' → mother。
+  // 只看控件自身标签（强层）与最近的分组容器（如"母亲信息"分组 div），
+  // 不用弱层（那是相邻区块的文本，会把"父亲姓名"行混进母亲字段、把家庭区块溢给后面的字段）。
+  function parentCtxOf(c, el) {
+    const probe = (t) => {
+      const s = String(t || '');
+      if (!s || s.length > 200) return null; // 超长文本（form/body 级）不可信
+      if (/父亲|爸爸/.test(s)) return 'father';
+      if (/母亲|妈妈/.test(s)) return 'mother';
+      return null;
+    };
+    let r = probe(c.strong);
+    if (r) return r;
+    let a = el.parentElement;
+    for (let i = 0; i < 3 && a && a !== document.body; i++) {
+      r = probe(textOf(a));
+      if (r) return r;
+      a = a.parentElement;
+    }
+    return null;
+  }
+
   function matchRuleFor(el, profile) {
     const c = ctxOf(el);
     // 黑名单（验证码等）只看控件自身的标签信号（强层），
     // 弱层是相邻行的文本，若一并检查会误杀排在验证码后面的正常字段
     if (isCaptchaCtx(c.strong)) return null;
-    const rule = matchRule(c.strong) || matchRule(c.weak);
+    const pCtx = parentCtxOf(c, el);
+    const strongRule = matchRule(c.strong, pCtx);
+    // 家长上下文里出现裸"姓名/联系电话"（强层命中本人姓名/手机等通用字段）时改判为家长字段
+    if (pCtx && strongRule && ['name', 'phone'].includes(strongRule.key)) {
+      return matchRule(c.strong + ' ' + c.weak, pCtx);
+    }
+    // 家长区里的裸"工作单位/职务"强层没有普通规则可匹配 → 用家长规则兜底
+    if (pCtx && !strongRule) {
+      return matchRule(c.strong + ' ' + c.weak, pCtx) || matchRule(c.weak, null);
+    }
+    const rule = strongRule || matchRule(c.weak, pCtx);
     if (rule && rule.byDegree) {
       const variant = FIELD_MAP[(DEGREE_BASE[rule.key] || rule.key) + degreeVariantOf(c, profile)];
       if (variant) return variant;
@@ -398,13 +444,16 @@
     return s.includes('验证码') || s.includes('captcha') || s.includes('verify');
   }
 
-  // 根据上下文匹配字段：关键词出现位置越靠前越优先；同位置取更长关键词；exclude 出现在关键词之前则否决
-  function matchRule(ctxRaw) {
+  // 根据上下文匹配字段：关键词出现位置越靠前越优先；同位置取更长关键词；exclude 出现在关键词之前则否决。
+  // parentCtx（'father'|'mother'|null）：家庭成员区路由。带 parentScope 的规则仅在上下文判定为该家长时
+  // 参与匹配（避免裸"职务/联系电话"在非家庭区误填），且判定命中时家长规则优先于通用字段。
+  function matchRule(ctxRaw, parentCtx) {
     const ctx = norm(ctxRaw);
     if (!ctx) return null;
     if (ctx.includes('验证码') || ctx.includes('captcha') || ctx.includes('verify')) return null;
     let best = null; // {rule, pos, kwLen}
-    for (const rule of ALL_FIELDS) {
+    const consider = (rule) => {
+      if (rule.parentScope && rule.parentScope !== parentCtx) return;
       let pos = -1, kwLen = 0;
       for (const kw of rule.kws) {
         const nk = norm(kw);
@@ -414,15 +463,21 @@
           pos = p; kwLen = nk.length;
         }
       }
-      if (pos < 0) continue;
+      if (pos < 0) return;
       let veto = false;
       for (const ex of rule.exclude || []) {
         const ep = ctx.indexOf(norm(ex));
-        if (ep >= 0 && ep < pos + kwLen) { veto = true; break; } // exclude 出现在关键词前面（同标签内）
+        if (ep >= 0 && ep < pos + kwLen) { veto = true; break; }
       }
-      if (veto) continue;
+      if (veto) return;
       if (!best || pos < best.pos || (pos === best.pos && kwLen > best.kwLen)) best = { rule, pos, kwLen };
+    };
+    // 家长上下文命中时，家长专属规则优先（裸"姓名"应填家长而非本人）
+    if (parentCtx) {
+      for (const rule of ALL_FIELDS) if (rule.parentScope === parentCtx) consider(rule);
+      if (best) return best.rule;
     }
+    for (const rule of ALL_FIELDS) consider(rule);
     return best ? best.rule : null;
   }
 
