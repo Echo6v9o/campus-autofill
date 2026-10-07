@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         校招一键填写助手（本地版）
 // @namespace    local.campus.autofill
-// @version      1.9.0
+// @version      1.10.0
 // @description  校招网申表单一键填写：简历信息保存在本地，智能识别姓名/性别/学校/实习经历等字段，兼容 React/Vue 受控表单、原生下拉、单选组和 iframe 内嵌表单。数据不上传任何服务器。
 // @author       local
 // @match        *://*/*
@@ -81,6 +81,14 @@
         { key: 'ielts', label: '雅思成绩', kws: ['雅思成绩', '雅思分数', '雅思', 'ielts'] },
         { key: 'toefl', label: '托福成绩', kws: ['托福成绩', '托福分数', '托福', 'toefl'] },
         { key: 'english', label: '英语水平（综合描述，兜底）', kws: ['大学英语', '英语水平', '英语等级', '外语水平', 'cet', '英语'], exclude: ['专业'] },
+      ],
+    },
+    {
+      title: '教育背景 · 高中',
+      fields: [
+        { key: 'school_h', label: '高中学校', kws: ['高中毕业院校', '高中就读院校', '毕业中学', '高中学校', '就读高中', '高中名称', '高中院校', '高中'] },
+        { key: 'entrance_h', label: '高中入学时间', kws: ['高中入学时间', '高中入学年月', '高中入学年份', '高中入学'] },
+        { key: 'grad_h', label: '高中毕业时间', kws: ['高中毕业时间', '高中毕业年月', '高中毕业年份', '高中毕业'] },
       ],
     },
     {
@@ -218,7 +226,12 @@
     const suf = deg.includes('博士') ? '_p' : (deg.includes('硕士') || deg.includes('研究生')) ? '_m' : '_b';
     for (const [oldK, base] of Object.entries(OLD_KEY_MAP)) {
       const newK = base + suf;
-      if ((p[oldK] || '').trim() && !(p[newK] || '').trim()) { p[newK] = p[oldK].trim(); changed = true; }
+      if ((p[oldK] || '').trim()) {
+        if (!(p[newK] || '').trim()) p[newK] = p[oldK].trim();
+        // 迁移后删除旧键：hidden 通用规则（如高中区块的"学校"）仍按旧键取值，残留会误填
+        delete p[oldK];
+        changed = true;
+      }
     }
     // v1.1 及更早的整段实习/项目文本 → v1.2 多条结构（作为第 1 条的描述）
     for (const [oldK, arrK] of [['internship', 'internships'], ['project', 'projects']]) {
@@ -431,7 +444,9 @@
       return matchRule(c.strong + ' ' + c.weak, pCtx) || matchRule(c.weak, null);
     }
     const rule = strongRule || matchRule(c.weak, pCtx);
-    if (rule && rule.byDegree) {
+    // 学历路由只管本科/硕士/博士：上下文属于高中（"高中/中学"字样）时不做路由，
+    // 否则高中区块里的通用"学校/毕业时间"会误填本科的数据
+    if (rule && rule.byDegree && !/高中|中学/.test(norm(c.strong + ' ' + c.weak))) {
       const variant = FIELD_MAP[(DEGREE_BASE[rule.key] || rule.key) + degreeVariantOf(c, profile)];
       if (variant) return variant;
     }
