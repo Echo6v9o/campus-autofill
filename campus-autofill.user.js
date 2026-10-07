@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         校招一键填写助手（本地版）
 // @namespace    local.campus.autofill
-// @version      1.10.0
+// @version      1.11.0
 // @description  校招网申表单一键填写：简历信息保存在本地，智能识别姓名/性别/学校/实习经历等字段，兼容 React/Vue 受控表单、原生下拉、单选组和 iframe 内嵌表单。数据不上传任何服务器。
 // @author       local
 // @match        *://*/*
@@ -63,10 +63,12 @@
         { key: 'marital', label: '婚姻状况', choice: true, kws: ['婚姻', '婚否', '结婚'] },
         // 家庭成员（parentScope: 裸标签仅在上下文判定为对应家长时参与匹配）
         { key: 'father_name', label: '父亲姓名', parentScope: 'father', kws: ['父亲姓名', '父亲名字', '姓名', '名字'] },
+        { key: 'father_birth', label: '父亲出生年月', parentScope: 'father', kws: ['父亲出生年月', '父亲出生日期', '父亲生日', '出生年月', '出生日期', '出生'] },
         { key: 'father_org', label: '父亲工作单位', parentScope: 'father', kws: ['父亲工作单位', '父亲单位', '父亲所在单位', '工作单位', '单位', '任职单位', '所在单位'] },
         { key: 'father_job', label: '父亲职务', parentScope: 'father', kws: ['父亲职务', '父亲职位', '职务', '职位'] },
         { key: 'father_phone', label: '父亲联系电话', parentScope: 'father', kws: ['父亲联系电话', '父亲电话', '父亲手机', '联系电话', '电话', '手机'] },
         { key: 'mother_name', label: '母亲姓名', parentScope: 'mother', kws: ['母亲姓名', '母亲名字', '姓名', '名字'] },
+        { key: 'mother_birth', label: '母亲出生年月', parentScope: 'mother', kws: ['母亲出生年月', '母亲出生日期', '母亲生日', '出生年月', '出生日期', '出生'] },
         { key: 'mother_org', label: '母亲工作单位', parentScope: 'mother', kws: ['母亲工作单位', '母亲单位', '母亲所在单位', '工作单位', '单位', '任职单位', '所在单位'] },
         { key: 'mother_job', label: '母亲职务', parentScope: 'mother', kws: ['母亲职务', '母亲职位', '职务', '职位'] },
         { key: 'mother_phone', label: '母亲联系电话', parentScope: 'mother', kws: ['母亲联系电话', '母亲电话', '母亲手机', '联系电话', '电话', '手机'] },
